@@ -118,9 +118,7 @@ fun GoSettingsScreen(
         }
     }
 
-    var showServiceSheet by remember { mutableStateOf(false) }
     var showQualitySheet by remember { mutableStateOf(false) }
-    var pendingServiceSelection by remember { mutableStateOf<String?>(null) }
 
     CollapsibleHeaderScreen(
         title = stringResource(R.string.exp_go_mode),
@@ -192,15 +190,9 @@ fun GoSettingsScreen(
                     title = stringResource(R.string.streaming_settings_group_services),
                     items = listOf(
                         Material3SettingsItem(
-                            icon = MaterialSymbolIcon("cloud_queue"),
-                            title = { Text(text = stringResource(R.string.streaming_settings_preferred_service)) },
-                            description = { Text(text = selectedService) },
-                            onClick = { showServiceSheet = true }
-                        ),
-                        Material3SettingsItem(
                             icon = RhythmIcons.Settings,
-                            title = { Text(text = stringResource(R.string.gosettingsscreen_configure_current_provider)) },
-                            description = { Text(text = selectedServiceLabel(selectedService, context)) },
+                            title = { Text(text = stringResource(R.string.shenye_server)) },
+                            description = { Text(text = selectedSession?.serverUrl?.takeIf { it.isNotBlank() } ?: stringResource(R.string.shenye_server_description)) },
                             onClick = { 
                                 // Validate selectedService is not empty before navigating
                                 if (selectedService.isNotBlank()) {
@@ -239,7 +231,7 @@ fun GoSettingsScreen(
 
             item {
                 StreamingStatusCard(
-                    selectedServiceName = selectedServiceLabel(selectedService, context),
+                    selectedServiceName = stringResource(R.string.shenye_server),
                     isConnected = selectedServiceConnected,
                     isLoading = isLoading,
                     username = selectedSession?.username.orEmpty(),
@@ -249,82 +241,6 @@ fun GoSettingsScreen(
 
             item { Spacer(modifier = Modifier.height(18.dp)) }
         }
-    }
-
-    // Render sheets when requested
-    if (showServiceSheet) {
-        ServiceSelectionBottomSheet(
-            selectedService = selectedService,
-            sessions = sessions,
-            onDismiss = {
-                pendingServiceSelection = null
-                showServiceSheet = false
-            },
-            onSelect = { serviceId ->
-                if (serviceId.isNotBlank()) {
-                    HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
-
-                    // Prompt whenever switching away while any provider session is currently active.
-                    val hasActiveSession = sessions.any { (_, session) -> session.isConnected }
-                    if (hasActiveSession && serviceId != selectedService) {
-                        pendingServiceSelection = serviceId
-                    } else {
-                        appSettings.setStreamingService(serviceId)
-                        if (appMode == "STREAMING") {
-                            viewModel.refreshCurrentSession()
-                        }
-                        showServiceSheet = false
-                    }
-                }
-            }
-        )
-    }
-
-    pendingServiceSelection?.let { pendingId ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { pendingServiceSelection = null },
-            icon = {
-                Icon(
-                    imageVector = MaterialSymbolIcon("cloud_queue"),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = stringResource(id = chromahub.rhythm.app.R.string.streaming_settings_switch_provider_confirm_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                val currentLabel = selectedServiceLabel(selectedService, context)
-                val pendingLabel = selectedServiceLabel(pendingId, context)
-                Text(
-                    text = stringResource(id = chromahub.rhythm.app.R.string.streaming_settings_switch_provider_confirm_desc, currentLabel, pendingLabel),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    appSettings.setStreamingService(pendingId)
-                    if (appMode == "STREAMING") {
-                        viewModel.refreshCurrentSession()
-                    }
-                    pendingServiceSelection = null
-                    showServiceSheet = false
-                }) {
-                    Text(text = stringResource(id = chromahub.rhythm.app.R.string.action_switch))
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { pendingServiceSelection = null }) {
-                    Text(text = stringResource(id = chromahub.rhythm.app.R.string.action_cancel))
-                }
-            }
-        )
     }
 
     if (showQualitySheet) {
@@ -687,7 +603,3 @@ private fun QualitySelectionBottomSheet(
     }
 }
 
-private fun selectedServiceLabel(selectedService: String, context: Context): String {
-    val matching = StreamingServiceOptions.defaults.firstOrNull { it.id == selectedService }
-    return matching?.let { context.getString(it.nameRes) } ?: context.getString(chromahub.rhythm.app.R.string.streaming_not_selected)
-}

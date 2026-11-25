@@ -872,7 +872,7 @@ class AppSettings private constructor(context: Context) {
     private val _floatingNavigationBar = MutableStateFlow(prefs.getBoolean(KEY_FLOATING_NAVIGATION_BAR, true))
     val floatingNavigationBar: StateFlow<Boolean> = _floatingNavigationBar.asStateFlow()
     
-    private val _useDynamicColors = MutableStateFlow(prefs.getBoolean(KEY_USE_DYNAMIC_COLORS, true))
+    private val _useDynamicColors = MutableStateFlow(prefs.getBoolean(KEY_USE_DYNAMIC_COLORS, false))
     val useDynamicColors: StateFlow<Boolean> = _useDynamicColors.asStateFlow()
     
     // Artist Separator Settings
@@ -898,7 +898,7 @@ class AppSettings private constructor(context: Context) {
     private val _customFont = MutableStateFlow(prefs.getString(KEY_CUSTOM_FONT, "Geom") ?: "Geom")
     val customFont: StateFlow<String> = _customFont.asStateFlow()
     
-    private val _colorSource = MutableStateFlow(prefs.getString(KEY_COLOR_SOURCE, "MONET") ?: "MONET")
+    private val _colorSource = MutableStateFlow(prefs.getString(KEY_COLOR_SOURCE, "CUSTOM") ?: "CUSTOM")
     val colorSource: StateFlow<String> = _colorSource.asStateFlow()
     
     private val _extractedAlbumColors = MutableStateFlow(prefs.getString(KEY_EXTRACTED_ALBUM_COLORS, null))
@@ -1378,7 +1378,7 @@ class AppSettings private constructor(context: Context) {
     private val _showRemainingTime = MutableStateFlow(prefs.getBoolean(KEY_SHOW_REMAINING_TIME, false))
     val showRemainingTime: StateFlow<Boolean> = _showRemainingTime.asStateFlow()
     
-    private val _expressiveColors = MutableStateFlow(prefs.getBoolean(KEY_EXPRESSIVE_COLORS, true))
+    private val _expressiveColors = MutableStateFlow(prefs.getBoolean(KEY_EXPRESSIVE_COLORS, false))
     val expressiveColors: StateFlow<Boolean> = _expressiveColors.asStateFlow()
 
     private val _themeIntensity = MutableStateFlow(prefs.getString(KEY_THEME_INTENSITY, "STANDARD") ?: "STANDARD")
@@ -1899,7 +1899,7 @@ class AppSettings private constructor(context: Context) {
     val embeddedArtworkExtractionLosslessStatus: StateFlow<Boolean> = _embeddedArtworkExtractionLosslessStatus.asStateFlow()
 
     // App Updater Settings
-private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CHECK_FOR_UPDATES, BuildConfig.FLAVOR != "fdroid"))
+private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CHECK_FOR_UPDATES, false))
     val autoCheckForUpdates: StateFlow<Boolean> = _autoCheckForUpdates.asStateFlow()
     
     private val _updateChannel = MutableStateFlow(prefs.getString(KEY_UPDATE_CHANNEL, "stable") ?: "stable")
@@ -1908,7 +1908,7 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
     private val _updateSource = MutableStateFlow(prefs.getString(KEY_UPDATE_SOURCE, "installed") ?: "installed")
     val updateSource: StateFlow<String> = _updateSource.asStateFlow()
     
-    private val _updatesEnabled = MutableStateFlow(prefs.getBoolean(KEY_UPDATES_ENABLED, BuildConfig.FLAVOR != "fdroid"))
+    private val _updatesEnabled = MutableStateFlow(prefs.getBoolean(KEY_UPDATES_ENABLED, false))
     val updatesEnabled: StateFlow<Boolean> = _updatesEnabled.asStateFlow()
     
     private val _updateNotificationsEnabled = MutableStateFlow(prefs.getBoolean(KEY_UPDATE_NOTIFICATIONS_ENABLED, BuildConfig.FLAVOR != "fdroid"))
@@ -2010,7 +2010,7 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
     val enableAlbumEditing: StateFlow<Boolean> = _enableAlbumEditing.asStateFlow()
     
     // Festive Theme Settings
-    private val _festiveThemeEnabled = MutableStateFlow(prefs.getBoolean(KEY_FESTIVE_THEME_ENABLED, true))
+    private val _festiveThemeEnabled = MutableStateFlow(prefs.getBoolean(KEY_FESTIVE_THEME_ENABLED, false))
     val festiveThemeEnabled: StateFlow<Boolean> = _festiveThemeEnabled.asStateFlow()
     
     private val _festiveThemeType = MutableStateFlow(prefs.getString(KEY_FESTIVE_THEME_TYPE, "CHRISTMAS") ?: "CHRISTMAS")
@@ -5705,10 +5705,10 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
         _externalPlayerAutoCloseOnFinish.value = prefs.getBoolean(KEY_EXTERNAL_PLAYER_AUTO_CLOSE_ON_FINISH, false)
         
         // App Updates
-        _autoCheckForUpdates.value = prefs.getBoolean(KEY_AUTO_CHECK_FOR_UPDATES, BuildConfig.FLAVOR != "fdroid")
+        _autoCheckForUpdates.value = prefs.getBoolean(KEY_AUTO_CHECK_FOR_UPDATES, false)
         _updateChannel.value = prefs.getString(KEY_UPDATE_CHANNEL, "stable") ?: "stable"
         _updateSource.value = prefs.getString(KEY_UPDATE_SOURCE, "installed") ?: "installed"
-        _updatesEnabled.value = prefs.getBoolean(KEY_UPDATES_ENABLED, BuildConfig.FLAVOR != "fdroid")
+        _updatesEnabled.value = prefs.getBoolean(KEY_UPDATES_ENABLED, false)
         _updateNotificationsEnabled.value = prefs.getBoolean(KEY_UPDATE_NOTIFICATIONS_ENABLED, BuildConfig.FLAVOR != "fdroid")
         _updateStatusNotificationsEnabled.value = prefs.getBoolean(KEY_UPDATE_STATUS_NOTIFICATIONS_ENABLED, false)
         _mediaScanMode.value = MediaScanMode.fromValue(prefs.getString(KEY_MEDIA_SCAN_MODE, "blacklist") ?: "blacklist")
@@ -6803,7 +6803,7 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
     // ==================== Expressive MaterialShapes Settings ====================
     
     // Master toggle for expressive shapes feature
-    private val _expressiveShapesEnabled = MutableStateFlow(prefs.getBoolean(KEY_EXPRESSIVE_SHAPES_ENABLED, true))
+    private val _expressiveShapesEnabled = MutableStateFlow(prefs.getBoolean(KEY_EXPRESSIVE_SHAPES_ENABLED, false))
     val expressiveShapesEnabled: StateFlow<Boolean> = _expressiveShapesEnabled.asStateFlow()
     fun setExpressiveShapesEnabled(value: Boolean) {
         _expressiveShapesEnabled.value = value

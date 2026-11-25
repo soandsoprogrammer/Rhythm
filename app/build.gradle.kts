@@ -30,7 +30,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "chromahub.rhythm.app"
+        applicationId = "app.shenye.music"
         minSdk = 26
         targetSdk = 37
         
@@ -64,7 +64,7 @@ android {
     productFlavors {
         create("fdroid") {
             dimension = "distribution"
-            applicationId = "chromahub.rhythm.app"
+            applicationId = "app.shenye.music"
             
             // F-Droid build: Enable all features (FOSS ethos)
             buildConfigField("boolean", "ENABLE_YOUTUBE_MUSIC", "true")
@@ -81,7 +81,7 @@ android {
         
         create("github") {
             dimension = "distribution"
-            applicationId = "chromahub.rhythm.app"
+            applicationId = "app.shenye.music"
             
             // GitHub releases: Enable all features (same as F-Droid)
             buildConfigField("boolean", "ENABLE_YOUTUBE_MUSIC", "true")

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shenye_name" translatable="false">声页</string>
+    <string name="shenye_server">Music server</string>
+    <string name="shenye_server_description">Connect to a self-hosted Shenye music server.</string>
+    <string name="shenye_server_address_hint" translatable="false">http://192.168.1.10:8787</string>
+    <string name="shenye_server_token">Access token</string>
+    <string name="shenye_server_library">Server library</string>
+    <string name="shenye_local_library">Local library</string>
+</resources>

@@ -1,8 +1,8 @@
-name: Build Rhythm APK
+name: Build Shenye APK
 
 on:
   push:
-    branches: [zh-cn]
+    branches: [shenye]
     paths:
       - '.github/workflows/build-zh-cn.yml'
       - 'app/src/main/**'
@@ -25,6 +25,8 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           packages: ''
+      - name: Check server syntax
+        run: node --check server/shenye-server.mjs
       - name: Build GitHub release APK
         run: bash gradlew :app:assembleGithubRelease --stacktrace
       - name: Verify and prepare universal APK
@@ -38,11 +40,11 @@ jobs:
           "$build_tools/aapt2" dump badging "$apk" > apk-badging.txt
           grep -E "^locales:.*'zh(-CN)?'" apk-badging.txt
           mkdir verified-apk
-          cp "$apk" verified-apk/Rhythm-5.6.506.1360-zh-CN.apk
+          cp "$apk" verified-apk/Shenye-android.apk
           cd verified-apk
-          sha256sum Rhythm-5.6.506.1360-zh-CN.apk > SHA256SUMS.txt
+          sha256sum Shenye-android.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v7
         with:
-          name: Rhythm-zh-CN
+          name: Shenye-android
           path: verified-apk/
           if-no-files-found: error

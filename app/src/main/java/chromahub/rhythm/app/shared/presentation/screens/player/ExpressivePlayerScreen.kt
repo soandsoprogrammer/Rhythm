@@ -306,13 +306,13 @@ fun ExpressivePlayerScreen(
     onEditBottomButtons: () -> Unit = {}
 ) {
     val artworkScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1.0f else 0.85f,
+        targetValue = if (isPlaying) 1.0f else 0.96f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "ArtworkScale"
     )
 
     val artworkCornerRadius by animateDpAsState(
-        targetValue = if (isPlaying) 32.dp else 48.dp,
+        targetValue = if (isPlaying) 6.dp else 10.dp,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "ArtworkCornerRadius"
     )

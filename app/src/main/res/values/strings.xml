@@ -1,11 +1,11 @@
 <resources>
-    <string name="app_name">Rhythm</string>
+    <string name="app_name">声页</string>
 <string name="home">Home</string>
     <string name="library">Library</string>
     <string name="search">Search</string>
 <string name="media3_notification_channel_name">Rhythm Now Playing</string>
     <string name="media3_notification_channel_description">Foreground playback controls, seek actions, and album artwork</string>    <string name="widget_description_glance">See what\'s playing and control your music from your home screen — play, pause, skip, and more.</string>
-    <string name="widget_name_glance">Rhythm Music</string>
+    <string name="widget_name_glance">声页 · Music</string>
     <string name="unknown_artist">Unknown artist</string>
     <string name="play_pause">Play/Pause</string>
 <string name="settings_widget">Widget</string>
@@ -342,7 +342,7 @@
     <string name="settings_about_report_bug">Report Bug or Suggest Feature</string>
 
 <string name="status_disabled">Disabled</string>
-<string name="home_title">Rhythm</string>
+<string name="home_title">Home</string>
     <string name="home_settings_cd">Settings</string>
     <string name="home_no_featured_albums">No Featured Albums</string>
     <string name="home_no_featured_albums_desc">Add some albums to your library to see featured content</string>
@@ -427,7 +427,7 @@
     <string name="search_recent_searches">Recent Searches</string>
     <string name="search_browse_by_genre">Browse by Genre</string>
 <string name="ui_dismiss">Dismiss</string>
-<string name="common_rhythm">Rhythm</string>
+<string name="common_rhythm">声页</string>
     <string name="common_home">Home</string>
     <string name="common_library">Library</string>
 <string name="splash_tagline">Your Music, Your Rhythm</string>
@@ -1392,11 +1392,11 @@
     <string name="settings_interval_every_12_hours">Every 12 hours</string>
     <string name="settings_interval_once_a_day">Once a day</string>
     <string name="settings_interval_once_a_week">Once a week</string>
-<string name="streaming_integration_title">Rhythm Go</string>
+<string name="streaming_integration_title">Server library</string>
     <string name="streaming_integration_services">Integration Services</string>
     <string name="streaming_integration_services_empty">No services connected yet</string>
     <string name="streaming_settings_title">Settings</string>
-    <string name="streaming_settings_group_services">Services</string>
+    <string name="streaming_settings_group_services">Connection</string>
     <string name="streaming_settings_group_actions">Actions</string>
     <string name="streaming_settings_preferred_service">Preferred Service</string>
     <string name="streaming_settings_quality">Streaming Quality</string>
@@ -1430,7 +1430,7 @@
     <string name="streaming_service_setup_server_url">Server URL</string>
     <string name="streaming_service_setup_server_url_hint">https://your-server.example.com</string>
     <string name="streaming_service_setup_server_url_supporting">Required for providers that need a server address.</string>
-    <string name="streaming_service_setup_username">Username or Email</string>
+    <string name="streaming_service_setup_username">Username</string>
     <string name="streaming_service_setup_username_hint">Enter your account username</string>
     <string name="streaming_service_setup_password">Password</string>
     <string name="streaming_service_setup_password_hint">Enter your account password</string>
@@ -1626,7 +1626,7 @@
     <string name="settings_broadcast_status_enabled_desc">Send playback info to Tasker, KWGT, and automation apps</string>
     <string name="settings_bluetooth_lyrics_enabled">Notification Lyrics</string>
     <string name="settings_bluetooth_lyrics_enabled_desc">Send synced lyrics as track metadata to Bluetooth devices and wearables</string>
-    <string name="exp_go_mode">Go Mode</string>
+    <string name="exp_go_mode">Music server</string>
     <string name="exp_go_mode_desc">Switch to Rhythm Go streaming mode</string>
 <string name="settings_home_section_order">Section Order</string>
     <string name="settings_home_section_order_desc">Reorder home sections</string>
@@ -1861,7 +1861,7 @@
     <string name="onboardingscreen_choose_your_playback_mode">Choose Your Playback Mode</string>
     <string name="onboardingscreen_rhythm_go">Rhythm GO</string>
     <string name="onboardingscreen_mode_local_desc">Play audio files stored on your device</string>
-    <string name="onboardingscreen_mode_streaming_desc">Stream from Jellyfin or Subsonic servers</string>
+    <string name="onboardingscreen_mode_streaming_desc">Play music from your Shenye server.</string>
     <string name="onboardingscreen_playback_mode_tips">Playback Mode Tips</string>
     <string name="onboardingscreen_local_mode_scans_and">Local mode scans and catalogs audio files on your device.</string>
     <string name="onboardingscreen_go_streaming_connects_via">GO Streaming connects via subsonic/jellyfin API server.</string>
@@ -2167,8 +2167,8 @@
     <string name="font_inter_desc">Clean and modern sans-serif font, highly readable</string>
     <string name="font_jetbrains_desc">Monospace font perfect for technical content</string>
     <string name="font_quicksand_desc">Rounded font with a softer, friendlier appearance</string>
-<string name="color_scheme_default_title">Rhythm Default</string>
-    <string name="color_scheme_default_desc">Material 3 baseline purple with rosy pink accents</string>
+<string name="color_scheme_default_title">Gallery</string>
+    <string name="color_scheme_default_desc">Warm paper and cobalt blue</string>
     <string name="color_scheme_warm_title">Warm Sunset</string>
     <string name="color_scheme_warm_desc">Cozy orange and red tones for a warm atmosphere</string>
     <string name="color_scheme_cool_title">Cool Ocean</string>
@@ -2973,7 +2973,7 @@
     <string name="batchedit_field_genre">Genre</string>
     <string name="batchedit_field_year">Year</string>
     <string name="rhythmnavigation_local_desc">Play music stored on your device</string>
-    <string name="rhythmnavigation_streaming_desc">Stream from Spotify and more</string>
+    <string name="rhythmnavigation_streaming_desc">Access your own music server</string>
     <string name="unresolved_song">Unresolved Song</string>
     <string name="unresolved_track">Unresolved Track</string>
     <string name="unknown_artist_name">Unknown Artist</string>

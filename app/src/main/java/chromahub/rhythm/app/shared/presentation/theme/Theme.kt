@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import chromahub.rhythm.app.R
 import chromahub.rhythm.app.utils.FontLoader
@@ -39,6 +40,32 @@ import com.google.android.material.color.utilities.SchemeTonalSpot
 import com.google.android.material.color.utilities.SchemeVibrant
 import com.google.android.material.color.utilities.SchemeExpressive
 import com.google.android.material.color.utilities.SchemeFruitSalad
+
+private val ShenyeLight = lightColorScheme(
+    primary = Color(0xFF2545C7), onPrimary = Color.White,
+    primaryContainer = Color(0xFFDEE5FF), onPrimaryContainer = Color(0xFF122470),
+    secondary = Color(0xFF833320), secondaryContainer = Color(0xFFFFDDCB),
+    onSecondaryContainer = Color(0xFF3F160D), tertiary = Color(0xFF365D46),
+    background = Color(0xFFF6EFE4), onBackground = Color(0xFF252322),
+    surface = Color(0xFFF6EFE4), onSurface = Color(0xFF252322),
+    surfaceVariant = Color(0xFFE9E0D3), onSurfaceVariant = Color(0xFF524942),
+    outline = Color(0xFF82766B), surfaceContainerLowest = Color(0xFFFFFAF2),
+    surfaceContainerLow = Color(0xFFF3EADC), surfaceContainer = Color(0xFFEDE3D6),
+    surfaceContainerHigh = Color(0xFFE7DBCC), surfaceContainerHighest = Color(0xFFE1D3C2)
+)
+
+private val ShenyeDark = darkColorScheme(
+    primary = Color(0xFFB7C5FF), onPrimary = Color(0xFF112165),
+    primaryContainer = Color(0xFF283A85), onPrimaryContainer = Color(0xFFE0E6FF),
+    secondary = Color(0xFFFFB59B), secondaryContainer = Color(0xFF6D2D1D),
+    onSecondaryContainer = Color(0xFFFFDED2), tertiary = Color(0xFF9ACBA9),
+    background = Color(0xFF1A191C), onBackground = Color(0xFFF4EDE2),
+    surface = Color(0xFF1A191C), onSurface = Color(0xFFF4EDE2),
+    surfaceVariant = Color(0xFF3A3639), onSurfaceVariant = Color(0xFFCEC4BA),
+    outline = Color(0xFF938881), surfaceContainerLowest = Color(0xFF171619),
+    surfaceContainerLow = Color(0xFF211F23), surfaceContainer = Color(0xFF29262A),
+    surfaceContainerHigh = Color(0xFF322F34), surfaceContainerHighest = Color(0xFF3B383D)
+)
 
 private val DarkColorScheme: androidx.compose.material3.ColorScheme
     get() = getCustomColorScheme("Default", true)
@@ -129,6 +156,8 @@ fun getCustomColorScheme(
     darkTheme: Boolean,
     themeIntensity: String = "STANDARD"
 ): ColorScheme {
+    if (schemeName == "Default") return if (darkTheme) ShenyeDark else ShenyeLight
+
     // Check if it's a custom hex color scheme first
     val customScheme = parseCustomColorScheme(schemeName, darkTheme, themeIntensity)
     if (customScheme != null) {
@@ -353,7 +382,11 @@ fun RhythmTheme(
         colorScheme = colorScheme,
         motionScheme = MotionScheme.expressive(),
         typography = typography,
-        shapes = Shapes,
+        shapes = Shapes.copy(
+            small = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+            medium = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+            large = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+        ),
         content = content
     )
 }

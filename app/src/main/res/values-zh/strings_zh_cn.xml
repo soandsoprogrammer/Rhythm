@@ -138,9 +138,9 @@
     <string name="explorer_no_storage_desc">请连接存储设备，或检查权限以浏览音乐文件</string>
     <string name="explorer_empty_folder">文件夹为空</string>
     <string name="explorer_empty_folder_desc">此文件夹中没有音频文件</string>
-    <string name="onboardingscreen_rhythm_go">Rhythm GO</string>
+    <string name="onboardingscreen_rhythm_go">服务器曲库</string>
     <string name="onboardingscreen_mode_local_desc">播放设备上保存的音频文件</string>
-    <string name="onboardingscreen_mode_streaming_desc">从 Jellyfin 或 Subsonic 服务器串流音乐</string>
+    <string name="onboardingscreen_mode_streaming_desc">播放自己部署的声页服务器中的音乐</string>
     <string name="onboarding_scanning_for_provider">正在扫描 %1$s…</string>
     <string name="onboarding_scanning_for_provider_desc">正在本地 Wi-Fi 网络中查找附近的服务器…</string>
     <string name="onboardingscreen_service_choice_tips">服务选择提示</string>
@@ -393,7 +393,7 @@
     <string name="rhythmcookiewidget_rhythm_logo">Rhythm标志</string>
     <string name="rhythmlyricswidget_no_lyrics_available">暂无歌词</string>
     <string name="rhythmlyricswidget_tagline">你的音乐，你的Rhythm</string>
-    <string name="rhythmlyricswidget_open_to_play">打开 Rhythm 播放音乐</string>
+    <string name="rhythmlyricswidget_open_to_play">打开声页播放音乐</string>
     <string name="rhythmstatswidget_listening">听歌</string>
     <string name="rhythmwidgetpreview_lyrics_widget">歌词小组件</string>
     <string name="rhythmwidgetpreview_lyrics_3x2">歌词小组件（3×2）</string>
@@ -558,7 +558,7 @@
     <string name="batchedit_field_genre">流派</string>
     <string name="batchedit_field_year">年份</string>
     <string name="rhythmnavigation_local_desc">播放设备上的音乐</string>
-    <string name="rhythmnavigation_streaming_desc">从 Spotify 等服务串流音乐</string>
+    <string name="rhythmnavigation_streaming_desc">访问你的自建音乐服务器</string>
     <string name="unresolved_song">未匹配的歌曲</string>
     <string name="unresolved_track">未匹配的曲目</string>
     <string name="unknown_artist_name">未知艺术家</string>
@@ -661,8 +661,8 @@
     <string name="viper_engine_status_title">音频引擎状态</string>
     <string name="viper_engine_status_subtitle">ViPER4Android DSP 监控</string>
     <string name="viper_engine_upstream">ViPER4Android 的 GitHub 页面</string>
-    <string name="widget_name_lyrics">Rhythm 歌词小组件</string>
-    <string name="widget_name_cookie">Rhythm 饼干小组件</string>
-    <string name="widget_name_stats">Rhythm 统计小组件</string>
+    <string name="widget_name_lyrics">声页歌词小组件</string>
+    <string name="widget_name_cookie">声页唱片小组件</string>
+    <string name="widget_name_stats">声页统计小组件</string>
     <string name="external_play_audio_label">播放音频</string>
 </resources>

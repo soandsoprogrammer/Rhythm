@@ -2286,7 +2286,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
      */
     fun getSourceTypeName(sourceType: SourceType): String {
         return when (sourceType) {
-            SourceType.SUBSONIC -> "Subsonic"
+            SourceType.SUBSONIC -> "声页音乐服务器"
             SourceType.JELLYFIN -> "Jellyfin"
             SourceType.SPOTIFY -> "Spotify"
             SourceType.APPLE_MUSIC -> "Apple Music"

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rhythm</string>
+    <string name="app_name">声页</string>
     <!-- Common Labels -->
     <string name="home">首页</string>
     <string name="library">曲库</string>
@@ -10,7 +10,7 @@
     <string name="media3_notification_channel_description">前台播放控制、搜索操作和专辑封面</string>
     <!-- Widget strings -->
     <string name="widget_description_glance">在主页上查看正在播放的音乐并控制音乐——播放、暂停、跳过等。</string>
-    <string name="widget_name_glance">Rhythm 音乐</string>
+    <string name="widget_name_glance">声页音乐</string>
     <string name="unknown_artist">未知艺术家</string>
     <string name="play_pause">播放/暂停</string>
     <!-- Widget Settings -->
@@ -293,7 +293,7 @@
     <!-- Status Labels -->
     <string name="status_disabled">已禁用</string>
     <!-- HomeScreen -->
-    <string name="home_title">Rhythm</string>
+    <string name="home_title">首页</string>
     <string name="home_settings_cd">设置</string>
     <string name="home_no_featured_albums">没有精选专辑</string>
     <string name="home_no_featured_albums_desc">将一些专辑添加到您的媒体库中以查看精选内容</string>
@@ -391,7 +391,7 @@
     <!-- Common UI -->
     <string name="ui_dismiss">取消</string>
     <!-- Common Terms -->
-    <string name="common_rhythm">Rhythm</string>
+    <string name="common_rhythm">声页</string>
     <string name="common_home">首页</string>
     <string name="common_library">音乐库</string>
     <!-- Splash/Loading -->
@@ -1411,11 +1411,11 @@
     <string name="settings_interval_once_a_day">每日一次</string>
     <string name="settings_interval_once_a_week">每周一次</string>
     <!-- Experimental Features -->
-    <string name="streaming_integration_title">Rhythm Go</string>
+    <string name="streaming_integration_title">服务器曲库</string>
     <string name="streaming_integration_services">集成服务</string>
     <string name="streaming_integration_services_empty">尚未连接服务</string>
     <string name="streaming_settings_title">设置</string>
-    <string name="streaming_settings_group_services">服务</string>
+    <string name="streaming_settings_group_services">连接设置</string>
     <string name="streaming_settings_group_actions">操作</string>
     <string name="streaming_settings_preferred_service">首选服务</string>
     <string name="streaming_settings_quality">流媒体质量</string>
@@ -1448,7 +1448,7 @@
     <string name="streaming_service_setup_server_url">服务器地址（URL）</string>
     <string name="streaming_service_setup_server_url_hint">https://your-server.example.com</string>
     <string name="streaming_service_setup_server_url_supporting">对于需要服务器地址的提供商来说是必需的。</string>
-    <string name="streaming_service_setup_username">用户名或电子邮件</string>
+    <string name="streaming_service_setup_username">用户名</string>
     <string name="streaming_service_setup_username_hint">输入您的帐户用户名</string>
     <string name="streaming_service_setup_password">密码</string>
     <string name="streaming_service_setup_password_hint">输入您的帐户密码</string>
@@ -1640,7 +1640,7 @@
     <string name="settings_broadcast_status_enabled_desc">广播播放状态</string>
     <string name="settings_bluetooth_lyrics_enabled">蓝牙歌词模式</string>
     <string name="settings_bluetooth_lyrics_enabled_desc">通过蓝牙元数据广播当前歌词行</string>
-    <string name="exp_go_mode">Go 模式</string>
+    <string name="exp_go_mode">音乐服务器</string>
     <string name="exp_go_mode_desc">切换到 Rhythm Go 流媒体播放模式</string>
     <!-- Home Screen Search Strings -->
     <string name="settings_home_section_order">章节顺序</string>
@@ -2149,8 +2149,8 @@
     <string name="font_jetbrains_desc">等宽字体完美适合技术内容</string>
     <string name="font_quicksand_desc">圆形字体，外观更柔和、更友好</string>
     <!-- Predefined Color Schemes -->
-    <string name="color_scheme_default_title">Rhythm 默认</string>
-    <string name="color_scheme_default_desc">Material 3 基线紫色，带有玫瑰粉色点缀</string>
+    <string name="color_scheme_default_title">展册</string>
+    <string name="color_scheme_default_desc">暖纸色与钴蓝配色</string>
     <string name="color_scheme_warm_title">温暖的夕阳</string>
     <string name="color_scheme_warm_desc">舒适的橙色和红色色调营造出温暖的氛围</string>
     <string name="color_scheme_cool_title">凉爽的海洋</string>

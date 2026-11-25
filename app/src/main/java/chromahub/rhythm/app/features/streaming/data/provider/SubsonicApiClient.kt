@@ -18,20 +18,22 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.TimeUnit
 import androidx.core.content.edit
 import chromahub.rhythm.app.shared.data.model.LyricsData
 
-class SubsonicErrorException(val code: Int, message: String) : Exception(message)
+class ShenyeServerException(val code: Int, message: String) : Exception(message)
 
 /**
- * Subsonic-compatible API client used for Navidrome/Subsonic service support.
+ * Catalog client for the Shenye music server. The legacy class and source type keep library IDs stable.
  */
 class SubsonicApiClient internal constructor(
     context: Context,
@@ -51,9 +53,6 @@ class SubsonicApiClient internal constructor(
 
     @Volatile
     private var credentials: Credentials? = loadCredentials()
-
-    @Volatile
-    private var usePasswordAuth: Boolean = prefs.getBoolean(KEY_USE_PASSWORD_AUTH, false)
 
     fun isConnected(): Boolean = credentials?.let { it.serverUrl.isNotBlank() && it.username.isNotBlank() && it.password.isNotBlank() } == true
 
@@ -79,33 +78,25 @@ class SubsonicApiClient internal constructor(
             return Result.failure(IllegalArgumentException("Password is required"))
         }
 
-        credentials = Credentials(
-            serverUrl = normalizedUrl,
-            username = username.trim(),
-            password = password
-        )
-
-        return ping().map {
+        val candidate = Credentials(normalizedUrl, username.trim(), password)
+        return request("ping", credentialOverride = candidate).mapCatching { response ->
+            parseShenyeResponse(response).getOrThrow()
             if (saveCredentials) {
                 prefs.edit {
-    putString(KEY_SERVER_URL, normalizedUrl)
-    putString(KEY_USERNAME, username.trim())
-    putString(KEY_PASSWORD, password)
-    putBoolean(KEY_USE_PASSWORD_AUTH, usePasswordAuth)
-}
+                    putString(KEY_SERVER_URL, normalizedUrl)
+                    putString(KEY_USERNAME, candidate.username)
+                    putString(KEY_PASSWORD, candidate.password)
+                }
             } else {
                 prefs.edit { clear() }
             }
-            ProviderConnectionResult(displayName = username.trim(), serverUrl = normalizedUrl)
-        }.onFailure {
-            credentials = null
+            credentials = candidate
+            ProviderConnectionResult(displayName = candidate.username, serverUrl = normalizedUrl)
         }
     }
 
     fun logout() {
         credentials = null
-        stableCoverArtAuth = null
-        usePasswordAuth = false
         prefs.edit { clear() }
     }
 
@@ -115,7 +106,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun searchSongs(query: String, limit: Int = 30): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         val params = mapOf(
@@ -132,7 +123,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun searchAlbums(query: String, limit: Int = 30): Result<List<ProviderAlbum>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         val params = mapOf(
@@ -149,7 +140,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getArtists(): Result<List<ProviderArtist>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         return requestAndParse("getArtists", emptyMap()) { response ->
@@ -176,7 +167,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun searchArtists(query: String, limit: Int = 30): Result<List<ProviderArtist>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         val params = mapOf(
@@ -193,7 +184,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getSimilarTracks(songId: String, limit: Int = 20): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (songId.isBlank()) {
             return Result.failure(IllegalArgumentException("Song id is required"))
@@ -211,7 +202,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getSimilarArtists(artistId: String, limit: Int = 10): Result<List<ProviderArtist>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (artistId.isBlank()) {
             return Result.failure(IllegalArgumentException("Artist id is required"))
@@ -229,7 +220,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getRandomSongs(limit: Int = 50): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         val params = mapOf(
@@ -243,7 +234,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getAlbumList(type: String = "newest", limit: Int = 50): Result<List<ProviderAlbum>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         val params = mapOf(
@@ -271,7 +262,7 @@ class SubsonicApiClient internal constructor(
         onPageFetched: (suspend (pageSongs: List<ProviderSong>, nextAlbumOffset: Int) -> Unit)? = null
     ): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         return withContext(Dispatchers.IO) {
@@ -394,7 +385,7 @@ class SubsonicApiClient internal constructor(
     /** Provider ids of the user's starred songs (one `getStarred2` request). */
     suspend fun getStarredSongIds(): Result<Set<String>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         return requestAndParse("getStarred2").map { response ->
             parseSongList(response.optJSONObject("starred2")?.opt("song"))
@@ -408,7 +399,7 @@ class SubsonicApiClient internal constructor(
      */
     private fun catalogAccountKey(): String? {
         val cred = credentials ?: return null
-        val material = "${cred.serverUrl}\n${cred.username}\n$usePasswordAuth"
+        val material = "${cred.serverUrl}\n${cred.username}"
         val digest = MessageDigest.getInstance("SHA-256").digest(material.toByteArray(Charsets.UTF_8))
         return digest.joinToString(separator = "") { "%02x".format(it) }
     }
@@ -430,7 +421,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getPlaylists(limit: Int = 100): Result<List<ProviderPlaylist>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         return requestAndParse("getPlaylists", emptyMap()) { response ->
@@ -441,7 +432,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun searchPlaylists(query: String, limit: Int = 30): Result<List<ProviderPlaylist>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         return getPlaylists(limit = 100).map { playlists ->
@@ -454,7 +445,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getPlaylistSongs(playlistId: String, limit: Int = 500): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (playlistId.isBlank()) {
             return Result.failure(IllegalArgumentException("Playlist id is required"))
@@ -468,7 +459,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getAlbumSongs(albumId: String, limit: Int = 500): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (albumId.isBlank()) {
             return Result.failure(IllegalArgumentException("Album id is required"))
@@ -481,7 +472,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getAlbumById(albumId: String): Result<ProviderAlbum> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (albumId.isBlank()) {
             return Result.failure(IllegalArgumentException("Album id is required"))
@@ -496,7 +487,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getArtistTopTracks(artistQuery: String, limit: Int = 20): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         return searchSongs(artistQuery, limit)
@@ -504,7 +495,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getArtistAlbums(artistQuery: String, limit: Int = 50): Result<List<ProviderAlbum>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
 
         return searchArtists(artistQuery, limit = 20).map { artists ->
@@ -521,7 +512,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getRelatedArtists(artistId: String, limit: Int = 10): Result<List<ProviderArtist>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (artistId.isBlank()) {
             return Result.failure(IllegalArgumentException("Artist id is required"))
@@ -539,7 +530,7 @@ class SubsonicApiClient internal constructor(
 
     suspend fun getRelatedTracks(songId: String, limit: Int = 20): Result<List<ProviderSong>> {
         if (!isConnected()) {
-            return Result.failure(IllegalStateException("Subsonic service is not connected"))
+            return Result.failure(IllegalStateException("Music server is not connected"))
         }
         if (songId.isBlank()) {
             return Result.failure(IllegalArgumentException("Song id is required"))
@@ -557,7 +548,7 @@ class SubsonicApiClient internal constructor(
 
     /** The user's starred songs, complete, in one `getStarred2` request. */
     suspend fun getStarredSongs(): Result<List<ProviderSong>> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
 
         return requestAndParse("getStarred2").map { response ->
             parseSongList(response.optJSONObject("starred2")?.opt("song"))
@@ -565,7 +556,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun markFavorite(id: String, isFavorite: Boolean): Result<Boolean> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
 
         val endpoint = if (isFavorite) "star" else "unstar"
@@ -573,7 +564,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun scrobble(id: String, submission: Boolean): Result<Boolean> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
 
         return requestAndParse(
@@ -583,7 +574,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun reportPlaybackProgress(id: String, positionMs: Long, isPaused: Boolean): Result<Boolean> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
 
         val state = if (isPaused) "pause" else "progress"
@@ -602,7 +593,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun createPlaylist(name: String, songIds: List<String> = emptyList()): Result<ProviderPlaylist> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (name.isBlank()) return Result.failure(IllegalArgumentException("Playlist name is required"))
 
         return requestAndParse(
@@ -629,7 +620,7 @@ class SubsonicApiClient internal constructor(
         songIdsToAdd: List<String> = emptyList(),
         songIndexesToRemove: List<Int> = emptyList()
     ): Result<Boolean> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (playlistId.isBlank()) return Result.failure(IllegalArgumentException("Playlist id is required"))
 
         val params = buildMap {
@@ -649,215 +640,53 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun deletePlaylist(playlistId: String): Result<Boolean> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (playlistId.isBlank()) return Result.failure(IllegalArgumentException("Playlist id is required"))
 
         return requestAndParse("deletePlaylist", mapOf("id" to playlistId)).map { true }
     }
 
-    /**
-     * Fetches lyrics for a song from Subsonic/Navidrome.
-     * First attempts OpenSubsonic getLyricsBySongId (supports synced structured lyrics).
-     * If unavailable, falls back to legacy getLyrics(artist, title).
-     */
     suspend fun getLyrics(
         songId: String,
         artist: String? = null,
         title: String? = null
     ): Result<LyricsData?> {
-        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (songId.isBlank()) return Result.failure(IllegalArgumentException("Song id is required"))
-
-        return withContext(Dispatchers.IO) {
-            // 1. Try OpenSubsonic getLyricsBySongId
-            val openSubsonicResult = requestAndParse("getLyricsBySongId", mapOf("id" to songId))
-            if (openSubsonicResult.isSuccess) {
-                val response = openSubsonicResult.getOrThrow()
-                val lyricsList = response.optJSONObject("lyricsList")
-                val structuredLyricsObj = lyricsList?.opt("structuredLyrics")
-                val structuredLyricsList: List<JSONObject> = when (structuredLyricsObj) {
-                    null -> emptyList()
-                    is JSONArray -> (0 until structuredLyricsObj.length()).mapNotNull { structuredLyricsObj.optJSONObject(it) }
-                    is JSONObject -> listOf(structuredLyricsObj)
-                    else -> emptyList()
-                }
-
-                if (structuredLyricsList.isNotEmpty()) {
-                    // Prefer synced lyrics if available
-                    val targetLyrics = structuredLyricsList.firstOrNull { it.optBoolean("synced", false) }
-                        ?: structuredLyricsList.first()
-
-                    val isSynced = targetLyrics.optBoolean("synced", false)
-                    val offset = targetLyrics.optLong("offset", 0L)
-                    val linesObj = targetLyrics.opt("line")
-                    val linesList: List<JSONObject> = when (linesObj) {
-                        null -> emptyList()
-                        is JSONArray -> (0 until linesObj.length()).mapNotNull { linesObj.optJSONObject(it) }
-                        is JSONObject -> listOf(linesObj)
-                        else -> emptyList()
-                    }
-
-                    if (linesList.isNotEmpty()) {
-                        val plainLines = mutableListOf<String>()
-                        val syncedLines = mutableListOf<String>()
-
-                        for (lineObj in linesList) {
-                            val text = lineObj.optString("value", "")
-                            plainLines.add(text)
-                            if (isSynced) {
-                                val startMs = (lineObj.optLong("start", 0L) + offset).coerceAtLeast(0L)
-                                syncedLines.add("${formatLrcTimestamp(startMs)}$text")
-                            }
-                        }
-
-                        val plainLyrics = plainLines.joinToString("\n").takeIf { it.isNotBlank() }
-                        val syncedLyrics = if (isSynced) syncedLines.joinToString("\n").takeIf { it.isNotBlank() } else null
-
-                        if (plainLyrics != null || syncedLyrics != null) {
-                            return@withContext Result.success(
-                                LyricsData(
-                                    plainLyrics = plainLyrics,
-                                    syncedLyrics = syncedLyrics,
-                                    source = "Navidrome (Subsonic)"
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 2. Fallback to legacy getLyrics(artist, title)
-            if (!artist.isNullOrBlank() && !title.isNullOrBlank()) {
-                val legacyResult = requestAndParse("getLyrics", mapOf("artist" to artist, "title" to title))
-                if (legacyResult.isSuccess) {
-                    val lyricsObj = legacyResult.getOrThrow().optJSONObject("lyrics")
-                    val content = lyricsObj?.optString("value", lyricsObj.optString("content", "")).orEmpty().trim()
-                    if (content.isNotBlank()) {
-                        val isLrc = content.lines().any { it.trim().matches(Regex("^\\[\\d{2}:\\d{2}.*?\\].*")) }
-                        val plainLyrics = if (isLrc) {
-                            content.lines().joinToString("\n") { it.replace(Regex("^\\[\\d{2}:\\d{2}.*?\\]"), "").trim() }
-                        } else {
-                            content
-                        }
-                        val syncedLyrics = if (isLrc) content else null
-
-                        return@withContext Result.success(
-                            LyricsData(
-                                plainLyrics = plainLyrics.takeIf { it.isNotBlank() },
-                                syncedLyrics = syncedLyrics?.takeIf { it.isNotBlank() },
-                                source = "Navidrome (Subsonic)"
-                            )
-                        )
-                    }
-                }
-            }
-
-            Result.success(null)
+        return requestAndParse("getLyricsBySongId", mapOf("id" to songId)) { response ->
+            val lyrics = response.optJSONObject("lyrics")?.optString("value").orEmpty().trim()
+            if (lyrics.isBlank()) return@requestAndParse null
+            val timestamp = Regex("^\\[\\d+:\\d{2}(?:[.:]\\d+)?\\]")
+            val synced = lyrics.lineSequence().any { timestamp.containsMatchIn(it.trimStart()) }
+            LyricsData(
+                plainLyrics = if (synced) null else lyrics,
+                syncedLyrics = lyrics.takeIf { synced },
+                source = "声页音乐服务器"
+            )
         }
     }
 
-    private fun formatLrcTimestamp(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        val hundredths = (ms % 1000) / 10
-        return String.format(java.util.Locale.US, "[%02d:%02d.%02d]", minutes, seconds, hundredths)
-    }
+    fun buildStreamUrl(songId: String, maxBitRateKbps: Int = 0, format: String? = null): String? =
+        mediaUrl("stream", songId)
 
-    fun buildStreamUrl(songId: String, maxBitRateKbps: Int = 0, format: String? = null): String? {
+    fun buildDownloadUrl(songId: String, format: String? = null): String? = mediaUrl("download", songId)
+
+    fun buildCoverArtUrl(coverArtId: String, size: Int = 500): String? = mediaUrl("getCoverArt", coverArtId)
+
+    private fun mediaUrl(endpoint: String, id: String): String? {
         val cred = credentials ?: return null
-        if (songId.isBlank()) return null
-
-        val parsedUrl = "${cred.serverUrl}/rest/stream.view".toHttpUrlOrNull() ?: return null
-        val urlBuilder = parsedUrl.newBuilder()
-            .addQueryParameter("u", cred.username)
-
-        if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).toLowerHex()
-            urlBuilder.addQueryParameter("p", obfuscated)
-        } else {
-            val (token, salt) = generateAuthParams(cred.password)
-            urlBuilder.addQueryParameter("t", token)
-            urlBuilder.addQueryParameter("s", salt)
-        }
-
-        urlBuilder.addQueryParameter("v", API_VERSION)
-            .addQueryParameter("c", CLIENT_ID)
-            .addQueryParameter("f", "json")
-            .addQueryParameter("id", songId)
-
-        if (maxBitRateKbps > 0) {
-            urlBuilder.addQueryParameter("maxBitRate", maxBitRateKbps.toString())
-        }
-        if (!format.isNullOrBlank()) {
-            urlBuilder.addQueryParameter("format", format)
-        }
-
-        return urlBuilder.build().toString()
-    }
-
-    fun buildDownloadUrl(songId: String, format: String? = null): String? {
-        val cred = credentials ?: return null
-        if (songId.isBlank()) return null
-
-        val parsedUrl = "${cred.serverUrl}/rest/download.view".toHttpUrlOrNull() ?: return null
-        val urlBuilder = parsedUrl.newBuilder()
-            .addQueryParameter("u", cred.username)
-
-        if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
-            urlBuilder.addQueryParameter("p", obfuscated)
-        } else {
-            val (token, salt) = generateAuthParams(cred.password)
-            urlBuilder.addQueryParameter("t", token)
-            urlBuilder.addQueryParameter("s", salt)
-        }
-
-        urlBuilder.addQueryParameter("v", API_VERSION)
-            .addQueryParameter("c", CLIENT_ID)
-            .addQueryParameter("f", "json")
-            .addQueryParameter("id", songId)
-
-        if (!format.isNullOrBlank()) {
-            urlBuilder.addQueryParameter("format", format)
-        }
-
-        return urlBuilder.build().toString()
-    }
-
-    fun buildCoverArtUrl(coverArtId: String, size: Int = 500): String? {
-        val cred = credentials ?: return null
-        if (coverArtId.isBlank()) return null
-
-        val parsedUrl = "${cred.serverUrl}/rest/getCoverArt.view".toHttpUrlOrNull() ?: return null
-        val urlBuilder = parsedUrl.newBuilder()
-            .addQueryParameter("u", cred.username)
-
-        if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).toLowerHex()
-            urlBuilder.addQueryParameter("p", obfuscated)
-        } else {
-            val (token, salt) = getStableCoverArtAuthParams(cred.password)
-            urlBuilder.addQueryParameter("t", token)
-            urlBuilder.addQueryParameter("s", salt)
-        }
-
-        return urlBuilder
-            .addQueryParameter("v", API_VERSION)
-            .addQueryParameter("c", CLIENT_ID)
-            .addQueryParameter("f", "json")
-            .addQueryParameter("id", coverArtId)
-            .addQueryParameter("size", size.toString())
-            .build()
-            .toString()
+        if (id.isBlank()) return null
+        val salt = if (endpoint == "getCoverArt") "cover-art-v1" else UUID.randomUUID().toString()
+        return buildApiUrl(cred, endpoint, mapOf("id" to id), salt = salt)
     }
 
     private suspend fun request(
         endpoint: String, 
         params: Map<String, String> = emptyMap(),
-        listParams: Map<String, List<String>> = emptyMap()
+        listParams: Map<String, List<String>> = emptyMap(),
+        credentialOverride: Credentials? = null
     ): Result<String> {
-        val cred = credentials ?: return Result.failure(IllegalStateException("Credentials not set"))
+        val cred = credentialOverride ?: credentials ?: return Result.failure(IllegalStateException("Credentials not set"))
 
         return withContext(Dispatchers.IO) {
             try {
@@ -865,8 +694,10 @@ class SubsonicApiClient internal constructor(
                 val request = Request.Builder()
                     .url(url)
                     .header("Accept", "application/json")
-                    .header("User-Agent", "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
-                    .get()
+                    .header("User-Agent", "Shenye/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
+                    .apply {
+                        if (endpoint in MUTATION_ENDPOINTS) post(EMPTY_REQUEST_BODY) else get()
+                    }
                     .build()
 
                 okHttpClient.newCall(request).execute().use { response ->
@@ -890,24 +721,10 @@ class SubsonicApiClient internal constructor(
     ): Result<JSONObject> = withContext(Dispatchers.IO) {
         // Parse on IO too: responses such as getArtists or getAlbum lists can be large, and
         // callers are often ViewModel coroutines on the main thread.
-        val result = request(endpoint, params, listParams).fold(
-            onSuccess = { parseSubsonicResponse(it) },
+        request(endpoint, params, listParams).fold(
+            onSuccess = { parseShenyeResponse(it) },
             onFailure = { Result.failure(it) }
         )
-        if (result.isFailure) {
-            val exception = result.exceptionOrNull()
-            if (exception is SubsonicErrorException && exception.code == 41 && !usePasswordAuth) {
-                usePasswordAuth = true
-                if (isConnected()) {
-                    prefs.edit { putBoolean(KEY_USE_PASSWORD_AUTH, true) }
-                }
-                return@withContext request(endpoint, params, listParams).fold(
-                    onSuccess = { parseSubsonicResponse(it) },
-                    onFailure = { Result.failure(it) }
-                )
-            }
-        }
-        result
     }
 
     /**
@@ -927,7 +744,7 @@ class SubsonicApiClient internal constructor(
     /**
      * [requestAndParse] for library-sync requests: retries network failures (timeouts, reset
      * streams) with exponential backoff, so one slow or dropped response does not lose an album.
-     * Server errors (HTTP or Subsonic error codes) are not retried.
+     * Server errors (HTTP or Music server error codes) are not retried.
      */
     private suspend fun requestAndParseWithRetry(
         endpoint: String,
@@ -945,18 +762,18 @@ class SubsonicApiClient internal constructor(
         }
     }
 
-    private fun parseSubsonicResponse(raw: String): Result<JSONObject> {
+    private fun parseShenyeResponse(raw: String): Result<JSONObject> {
         return try {
             val root = JSONObject(raw)
-            val wrapper = root.optJSONObject("subsonic-response")
-                ?: return Result.failure(IllegalStateException("Invalid Subsonic response"))
+            val wrapper = root.optJSONObject("shenye")
+                ?: return Result.failure(IllegalStateException("Invalid Shenye server response"))
 
             val status = wrapper.optString("status", "failed")
             if (status != "ok") {
                 val error = wrapper.optJSONObject("error")
                 val code = error?.optInt("code", -1) ?: -1
                 val message = error?.optString("message", "Unknown error") ?: "Unknown error"
-                return Result.failure(SubsonicErrorException(code, "Subsonic error $code: $message"))
+                return Result.failure(ShenyeServerException(code, "Music server error $code: $message"))
             }
 
             Result.success(wrapper)
@@ -972,9 +789,9 @@ class SubsonicApiClient internal constructor(
      */
     fun toUrlRef(url: String): String? {
         val cred = credentials ?: return null
-        if (!url.startsWith("${cred.serverUrl}/rest/")) return null
+        if (!url.startsWith("${cred.serverUrl}/shenye/v1/")) return null
         val parsed = url.toHttpUrlOrNull() ?: return null
-        val endpoint = parsed.pathSegments.lastOrNull()?.removeSuffix(".view")
+        val endpoint = parsed.pathSegments.lastOrNull()
         if (endpoint != "stream" && endpoint != "getCoverArt") return null
         val params = (0 until parsed.querySize)
             .filter { parsed.queryParameterName(it) !in URL_AUTH_PARAMS }
@@ -1017,39 +834,26 @@ class SubsonicApiClient internal constructor(
     }
 
     private fun buildApiUrl(
-        cred: Credentials, 
-        endpoint: String, 
+        cred: Credentials,
+        endpoint: String,
         params: Map<String, String>,
-        listParams: Map<String, List<String>> = emptyMap()
+        listParams: Map<String, List<String>> = emptyMap(),
+        salt: String = UUID.randomUUID().toString()
     ): String {
-        val parsedUrl = "${cred.serverUrl}/rest/$endpoint.view".toHttpUrlOrNull()
-            ?: throw IllegalStateException("Invalid API URL: ${cred.serverUrl}")
+        val parsedUrl = (cred.serverUrl + "/shenye/v1/" + endpoint).toHttpUrlOrNull()
+            ?: throw IllegalArgumentException("Invalid server address")
+        val proof = Mac.getInstance("HmacSHA256").run {
+            init(SecretKeySpec(cred.password.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+            doFinal(listOf(cred.username, endpoint, salt).joinToString("\n").toByteArray(Charsets.UTF_8)).toLowerHex()
+        }
         val builder = parsedUrl.newBuilder()
             .addQueryParameter("u", cred.username)
-
-        if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).toLowerHex()
-            builder.addQueryParameter("p", obfuscated)
-        } else {
-            val (token, salt) = generateAuthParams(cred.password)
-            builder.addQueryParameter("t", token)
-            builder.addQueryParameter("s", salt)
-        }
-
-        builder.addQueryParameter("v", API_VERSION)
-            .addQueryParameter("c", CLIENT_ID)
-            .addQueryParameter("f", "json")
-
-        params.forEach { (key, value) ->
-            builder.addQueryParameter(key, value)
-        }
-        
+            .addQueryParameter("s", salt)
+            .addQueryParameter("t", proof)
+        params.forEach { (key, value) -> builder.addQueryParameter(key, value) }
         listParams.forEach { (key, values) ->
-            values.forEach { value ->
-                builder.addQueryParameter(key, value)
-            }
+            values.forEach { value -> builder.addQueryParameter(key, value) }
         }
-
         return builder.build().toString()
     }
 
@@ -1230,34 +1034,6 @@ class SubsonicApiClient internal constructor(
         }
     }
 
-    private fun generateAuthParams(password: String): Pair<String, String> {
-        val salt = UUID.randomUUID().toString().take(6)
-        val token = md5(password + salt)
-        return token to salt
-    }
-
-    private fun getStableCoverArtAuthParams(password: String): Pair<String, String> {
-        // Deterministic per password, and requested for every parsed song/album/artist, so
-        // compute it once instead of two MD5s per cover-art URL.
-        stableCoverArtAuth?.let { cached ->
-            if (cached.password == password) return cached.token to cached.salt
-        }
-        val salt = md5(password).take(8)
-        val token = md5(password + salt)
-        stableCoverArtAuth = StableCoverArtAuth(password, token, salt)
-        return token to salt
-    }
-
-    private class StableCoverArtAuth(val password: String, val token: String, val salt: String)
-
-    @Volatile
-    private var stableCoverArtAuth: StableCoverArtAuth? = null
-
-    private fun md5(value: String): String {
-        val digest = MessageDigest.getInstance("MD5").digest(value.toByteArray(Charsets.UTF_8))
-        return digest.toLowerHex()
-    }
-
     private fun loadCredentials(): Credentials? {
         val server = prefs.getString(KEY_SERVER_URL, null).orEmpty()
         val user = prefs.getString(KEY_USERNAME, null).orEmpty()
@@ -1280,10 +1056,11 @@ class SubsonicApiClient internal constructor(
 
     private fun validateServerUrl(url: String): String? {
         val parsed = url.toHttpUrlOrNull() ?: return "Enter a valid server URL"
-        if (parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) {
-            return "Server URL must not contain embedded credentials"
+        if (parsed.query != null || parsed.fragment != null || parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) {
+            return "服务器地址不能包含登录信息、查询参数或片段"
         }
 
+        if (!parsed.isHttps && !isPrivateHost(parsed.host)) return "公网服务器请使用 HTTPS"
         return null
     }
 
@@ -1325,18 +1102,16 @@ class SubsonicApiClient internal constructor(
 
     private companion object {
         private const val TAG = "SubsonicApiClient"
-        private const val PREFS_NAME = "streaming_subsonic_credentials"
+        private const val PREFS_NAME = "shenye_server_credentials"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
-        private const val KEY_USE_PASSWORD_AUTH = "use_password_auth"
-
-        private const val API_VERSION = "1.16.1"
 
         /** Query parameters that carry credentials or client info; not part of a URL reference. */
-        private val URL_AUTH_PARAMS = setOf("u", "t", "s", "p", "v", "c", "f")
+        private val URL_AUTH_PARAMS = setOf("u", "t", "s")
         private const val URL_REF_ID_PLACEHOLDER = "RHYTHMURLREFID"
-        private const val CLIENT_ID = "Rhythm"
+        private val EMPTY_REQUEST_BODY = ByteArray(0).toRequestBody()
+        private val MUTATION_ENDPOINTS = setOf("star", "unstar", "createPlaylist", "updatePlaylist", "deletePlaylist", "scrobble", "reportPlayback")
 
         /** Parallel getAlbum requests during a library sync. */
         private const val LIBRARY_FETCH_CONCURRENCY = 4

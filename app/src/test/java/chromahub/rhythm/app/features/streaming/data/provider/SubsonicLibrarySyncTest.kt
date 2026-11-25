@@ -63,8 +63,8 @@ class SubsonicLibrarySyncTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val url = request.url
                 return when (url.encodedPath) {
-                    "/rest/ping.view" -> subsonicResponse()
-                    "/rest/getAlbumList2.view" -> {
+                    "/shenye/v1/ping" -> subsonicResponse()
+                    "/shenye/v1/getAlbumList2" -> {
                         val offset = url.queryParameter("offset")?.toIntOrNull() ?: 0
                         val albums = if (offset == 0) {
                             (1..TEST_ALBUM_COUNT).joinToString(",") {
@@ -75,7 +75,7 @@ class SubsonicLibrarySyncTest {
                         }
                         subsonicResponse(""","albumList2":{"album":[$albums]}""")
                     }
-                    "/rest/getAlbum.view" -> {
+                    "/shenye/v1/getAlbum" -> {
                         val albumId = url.queryParameter("id").orEmpty()
                         val attempt = albumRequests.getOrPut(albumId) { AtomicInteger(0) }.incrementAndGet()
                         maxAlbumsInFlight.accumulateAndGet(albumsInFlight.incrementAndGet(), ::maxOf)
@@ -105,7 +105,7 @@ class SubsonicLibrarySyncTest {
     }
 
     private fun subsonicResponse(customFields: String = ""): MockResponse = MockResponse.Builder()
-        .body("""{"subsonic-response":{"status":"ok","version":"1.16.1"$customFields}}""")
+        .body("""{"shenye":{"status":"ok","version":"1.16.1"$customFields}}""")
         .build()
 
     private fun createConnectedClient(): SubsonicApiClient {
@@ -194,7 +194,7 @@ class SubsonicLibrarySyncTest {
     fun testSubsonicUrlRefs_foreignUrlsIgnored() {
         val client = SubsonicApiClient(MockContext(mapOf("server_url" to "https://subsonic.example.com")))
         assertNull(client.toUrlRef("https://cdn.example.com/art.jpg"))
-        assertNull(client.toUrlRef("https://other-subsonic.com/rest/getCoverArt.view?id=1"))
+        assertNull(client.toUrlRef("https://other-subsonic.com/shenye/v1/getCoverArt?id=1"))
     }
 
     // -------------------------------------------------------------------------

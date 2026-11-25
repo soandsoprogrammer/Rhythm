@@ -563,6 +563,12 @@ fun HomeScreen(
         alwaysCollapsed = false,
         showAppIcon = showAppIcon,
         iconVisibilityMode = iconVisibilityMode,
+        headerContent = {
+            chromahub.rhythm.app.features.local.presentation.components.ShenyeMasthead(
+                serverLibrary = isStreamingMode,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        },
         headerActions = buildList {
             val showReorder = !isLandscapeTablet
             val showSettings = !isTablet && floatingNavigationBar
