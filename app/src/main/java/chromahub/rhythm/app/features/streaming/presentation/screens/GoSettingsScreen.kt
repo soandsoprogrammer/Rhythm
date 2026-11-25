@@ -84,7 +84,6 @@ fun GoSettingsScreen(
 
     // Collect streaming settings
     val selectedService by appSettings.streamingService.collectAsState()
-    val streamingQuality by appSettings.streamingQuality.collectAsState()
     val allowCellularStreaming by appSettings.allowCellularStreaming.collectAsState()
     val appMode by appSettings.appMode.collectAsState()
 
@@ -118,7 +117,6 @@ fun GoSettingsScreen(
         }
     }
 
-    var showQualitySheet by remember { mutableStateOf(false) }
 
     CollapsibleHeaderScreen(
         title = stringResource(R.string.exp_go_mode),
@@ -200,12 +198,6 @@ fun GoSettingsScreen(
                                 }
                             }
                         ),
-                        Material3SettingsItem(
-                            icon = MaterialSymbolIcon("high_quality"),
-                            title = { Text(text = stringResource(R.string.streaming_settings_quality)) },
-                            description = { Text(text = streamingQualityLabel(streamingQuality, context)) },
-                            onClick = { showQualitySheet = true }
-                        )
                     )
                 )
             }
@@ -243,17 +235,6 @@ fun GoSettingsScreen(
         }
     }
 
-    if (showQualitySheet) {
-        QualitySelectionBottomSheet(
-            selectedQuality = streamingQuality.uppercase(),
-            onDismiss = { showQualitySheet = false },
-            onSelect = { quality ->
-                HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
-                viewModel.setStreamingQuality(StreamingQuality.valueOf(quality))
-                showQualitySheet = false
-            }
-        )
-    }
 }
 
 @Composable
@@ -368,236 +349,6 @@ private fun StreamingStatusCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f)
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ServiceSelectionBottomSheet(
-    selectedService: String,
-    sessions: Map<String, chromahub.rhythm.app.features.streaming.data.repository.StreamingServiceSession>,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit
-) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-
-    RhythmAdaptiveModalSheet(
-        adaptiveType = SheetAdaptiveType.COMPACT_DIALOG,
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.primary) },
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth()
-    ) {
-        StandardBottomSheetHeader(
-            title = stringResource(R.string.streaming_settings_preferred_service),
-            subtitle = stringResource(R.string.streaming_settings_service_sheet_desc),
-            visible = true
-        )
-
-        val scrollState = rememberScrollState()
-
-        AdaptiveSheetScrollContainer(
-            scrollState = scrollState,
-            modifier = Modifier.fillMaxWidth()
-        ) { endPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(start = 24.dp, end = 24.dp + endPadding, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                StreamingServiceOptions.defaults.forEachIndexed { index, option ->
-                    val isSelected = selectedService == option.id
-                    val isConnected = sessions[option.id]?.isConnected == true
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = groupedBottomSheetItemShape(index, StreamingServiceOptions.defaults.size),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            }
-                        ),
-                        onClick = { onSelect(option.id) }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = MaterialSymbolIcon("cloud_queue"),
-                                contentDescription = null,
-                                tint = if (isSelected) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.size(if (isSelected) 30.dp else 26.dp)
-                            )
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(id = option.nameRes),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = if (isConnected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.outline
-                                        },
-                                        modifier = Modifier.size(6.dp)
-                                    ) {}
-                                    Text(
-                                        text = if (isConnected) {
-                                            stringResource(R.string.streaming_status_connected)
-                                        } else {
-                                            stringResource(R.string.streaming_status_not_connected)
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                }
-                            }
-
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = RhythmIcons.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun QualitySelectionBottomSheet(
-    selectedQuality: String,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit
-) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-
-    RhythmAdaptiveModalSheet(
-        adaptiveType = SheetAdaptiveType.COMPACT_DIALOG,
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.primary) },
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth()
-    ) {
-        StandardBottomSheetHeader(
-            title = stringResource(R.string.streaming_settings_quality),
-            subtitle = stringResource(R.string.streaming_settings_quality_sheet_desc),
-            visible = true
-        )
-
-        val scrollState = rememberScrollState()
-
-        AdaptiveSheetScrollContainer(
-            scrollState = scrollState,
-            modifier = Modifier.fillMaxWidth()
-        ) { endPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(start = 24.dp, end = 24.dp + endPadding, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                streamingQualityOptions.forEachIndexed { index, option ->
-                    val isSelected = selectedQuality == option.value
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = groupedBottomSheetItemShape(index, streamingQualityOptions.size),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            }
-                        ),
-                        onClick = { onSelect(option.value) }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = MaterialSymbolIcon("high_quality"),
-                                contentDescription = null,
-                                tint = if (isSelected) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.size(if (isSelected) 30.dp else 26.dp)
-                            )
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(id = option.titleRes),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                            }
-
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = RhythmIcons.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }

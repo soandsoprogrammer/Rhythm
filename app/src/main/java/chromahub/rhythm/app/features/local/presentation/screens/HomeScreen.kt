@@ -1239,31 +1239,12 @@ private fun StreamingHomeWelcomeContent(
                         modifier = Modifier.size(100.dp)
                     )
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = stringResource(id = R.string.common_rhythm),
-                            style = MaterialTheme.typography.displayMedium.copy(
-                                fontSize = 42.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onBackground,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Text(
-                            text = stringResource(R.string.splashscreen_go),
-                            style = MaterialTheme.typography.displayMedium.copy(
-                                fontSize = 42.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.shenye_server_library),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
                 Text(
@@ -1296,18 +1277,7 @@ private fun StreamingHomeWelcomeContent(
 
                     Material3SettingsItem(
                         leadingContent = {
-                            val providerIconRes = when (service.id) {
-                                StreamingServiceId.SUBSONIC -> R.drawable.ic_subsonic
-                                StreamingServiceId.JELLYFIN -> R.drawable.ic_jellyfin
-                                else -> null
-                            }
-                            if (providerIconRes != null) {
-                                Image(
-                                    painter = painterResource(id = providerIconRes),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
+                            Icon(imageVector = MaterialSymbolIcon("dns"), contentDescription = null)
                         },
                         title = {
                             Text(

@@ -1859,12 +1859,12 @@
     <string name="onboardingscreen_tap_the_remove_action">Tap the remove action to update folder access</string>
     <string name="onboardingscreen_interaction">Interaction</string>
     <string name="onboardingscreen_choose_your_playback_mode">Choose Your Playback Mode</string>
-    <string name="onboardingscreen_rhythm_go">Rhythm GO</string>
+    <string name="onboardingscreen_rhythm_go">Server library</string>
     <string name="onboardingscreen_mode_local_desc">Play audio files stored on your device</string>
     <string name="onboardingscreen_mode_streaming_desc">Play music from your Shenye server.</string>
     <string name="onboardingscreen_playback_mode_tips">Playback Mode Tips</string>
     <string name="onboardingscreen_local_mode_scans_and">Local mode scans and catalogs audio files on your device.</string>
-    <string name="onboardingscreen_go_streaming_connects_via">GO Streaming connects via subsonic/jellyfin API server.</string>
+    <string name="onboardingscreen_go_streaming_connects_via">Enter the address and access token of a Shenye music server.</string>
     <string name="onboardingscreen_streaming_setup_tips">Streaming Setup Tips</string>
     <string name="onboardingscreen_connection_test_ensures_server">Connection test ensures server credentials are correct.</string>
     <string name="onboardingscreen_subsonic_navidrome">Subsonic / Navidrome</string>
@@ -1891,7 +1891,7 @@
     <string name="gosettingsscreen_network">Network</string>
     <string name="gosettingsscreen_enable_streaming_over_mobile">Enable streaming over mobile data</string>
     <string name="gosettingsscreen_connection_is_healthy">Connection is healthy</string>
-    <string name="streaminghomescreen_leave_go_mode">Leave Go Mode</string>
+    <string name="streaminghomescreen_leave_go_mode">Switch to local library</string>
     <string name="streamingsettingsscreen_streaming_restricted">Streaming Restricted</string>
     <string name="streamingmusicviewmodel_failed_to_play_next">Failed to play next: Unable to resolve URL</string>
     <string name="streamingmusicviewmodel_failed_to_add_to">Failed to add to queue: Unable to resolve URL</string>

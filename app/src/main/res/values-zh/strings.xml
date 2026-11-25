@@ -1851,7 +1851,7 @@
     <string name="onboardingscreen_choose_your_playback_mode">选择您的播放模式</string>
     <string name="onboardingscreen_playback_mode_tips">播放模式提示</string>
     <string name="onboardingscreen_local_mode_scans_and">本地模式扫描并编录您设备上的音频文件。</string>
-    <string name="onboardingscreen_go_streaming_connects_via">GO Streaming 通过 subsonic/jellyfin API 服务器连接。</string>
+    <string name="onboardingscreen_go_streaming_connects_via">填写你部署的声页服务器地址和访问令牌。</string>
     <string name="onboardingscreen_streaming_setup_tips">流媒体设置技巧</string>
     <string name="onboardingscreen_connection_test_ensures_server">连接测试确保服务器凭据正确。</string>
     <string name="onboardingscreen_subsonic_navidrome">Subsonic / Navidrome</string>
@@ -1872,7 +1872,7 @@
     <string name="gosettingsscreen_network">网络</string>
     <string name="gosettingsscreen_enable_streaming_over_mobile">启用移动数据流</string>
     <string name="gosettingsscreen_connection_is_healthy">连接正常</string>
-    <string name="streaminghomescreen_leave_go_mode">解除 Go 模式</string>
+    <string name="streaminghomescreen_leave_go_mode">返回本地曲库</string>
     <string name="streamingsettingsscreen_streaming_restricted">流媒体限制</string>
     <string name="streamingmusicviewmodel_failed_to_play_next">无法播放下一个：无法解析 URL</string>
     <string name="streamingmusicviewmodel_failed_to_add_to">添加到队列失败：无法解析 URL</string>
