@@ -1,0 +1,48 @@
+name: Build Rhythm APK
+
+on:
+  push:
+    branches: [zh-cn]
+    paths:
+      - '.github/workflows/build-zh-cn.yml'
+      - 'app/src/main/**'
+      - 'app/build.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+      - name: Build GitHub release APK
+        run: bash gradlew :app:assembleGithubRelease --stacktrace
+      - name: Verify and prepare universal APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(find app/build/outputs/apk/github/release -maxdepth 1 -type f -name '*-githubRelease.apk' -print -quit)
+          test -n "$apk"
+          build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          "$build_tools/apksigner" verify --verbose --print-certs "$apk"
+          "$build_tools/aapt2" dump badging "$apk" > apk-badging.txt
+          grep -E "^locales:.*'zh(-CN)?'" apk-badging.txt
+          mkdir verified-apk
+          cp "$apk" verified-apk/Rhythm-5.6.506.1360-zh-CN.apk
+          cd verified-apk
+          sha256sum Rhythm-5.6.506.1360-zh-CN.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Rhythm-zh-CN
+          path: verified-apk/
+          if-no-files-found: error
