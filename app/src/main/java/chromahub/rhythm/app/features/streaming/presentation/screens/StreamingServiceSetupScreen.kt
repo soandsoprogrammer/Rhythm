@@ -4,6 +4,11 @@
 
 package chromahub.rhythm.app.features.streaming.presentation.screens
 
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,11 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import chromahub.rhythm.app.R
+import chromahub.rhythm.app.features.streaming.data.provider.isShenyeLocalAddress
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceId
 import chromahub.rhythm.app.features.streaming.presentation.viewmodel.StreamingMusicViewModel
 import chromahub.rhythm.app.shared.presentation.components.common.CollapsibleHeaderScreen
@@ -64,6 +71,7 @@ internal fun MusicServerForm(
     viewModel: StreamingMusicViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val serverId = StreamingServiceId.SUBSONIC
     val sessions by viewModel.serviceSessions.collectAsState()
     val busy by viewModel.isLoading.collectAsState()
@@ -72,6 +80,13 @@ internal fun MusicServerForm(
     var address by rememberSaveable(session.serverUrl) { mutableStateOf(session.serverUrl) }
     var username by rememberSaveable(session.username) { mutableStateOf(session.username.ifBlank { "music" }) }
     var token by remember { mutableStateOf("") }
+    var networkPermissionDenied by remember { mutableStateOf(false) }
+    val connect = { viewModel.connectService(serverId, address.trim(), username.trim(), token) }
+    val permission = "android.permission.ACCESS_LOCAL_NETWORK"
+    val requestNetworkPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        networkPermissionDenied = !granted
+        if (granted) connect()
+    }
     LaunchedEffect(session) {
         if (session.isConnected) token = ""
     }
@@ -121,14 +136,24 @@ internal fun MusicServerForm(
             enabled = !busy
         )
         if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        error?.takeIf { it.isNotBlank() }?.let { message ->
+        val connectionMessage = if (networkPermissionDenied) stringResource(R.string.shenye_local_network_required) else error
+        connectionMessage?.takeIf { it.isNotBlank() }?.let { message ->
             Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
         Button(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(4.dp),
             enabled = !busy && address.isNotBlank() && username.isNotBlank() && token.isNotBlank(),
-            onClick = { viewModel.connectService(serverId, address.trim(), username.trim(), token) }
+            onClick = {
+                networkPermissionDenied = false
+                if (Build.VERSION.SDK_INT >= 37 && isShenyeLocalAddress(address) &&
+                    ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    requestNetworkPermission.launch(permission)
+                } else {
+                    connect()
+                }
+            }
         ) {
             Text(stringResource(if (session.isConnected) R.string.streaming_service_setup_reconnect else R.string.streaming_connect))
         }

@@ -7,4 +7,5 @@
     <string name="shenye_server_token">Access token</string>
     <string name="shenye_server_library">Server library</string>
     <string name="shenye_local_library">Local library</string>
+    <string name="shenye_local_network_required">Allow local network access to connect to this server.</string>
 </resources>

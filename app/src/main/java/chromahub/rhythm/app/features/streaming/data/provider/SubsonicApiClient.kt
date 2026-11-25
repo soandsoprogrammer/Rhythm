@@ -1061,44 +1061,8 @@ class SubsonicApiClient internal constructor(
             return "服务器地址不能包含登录信息、查询参数或片段"
         }
 
-        if (!parsed.isHttps && !isPrivateHost(parsed.host)) return "公网服务器请使用 HTTPS"
+        if (!parsed.isHttps && !isShenyeLocalHost(parsed.host)) return "公网服务器请使用 HTTPS"
         return null
-    }
-
-    private fun isPrivateHost(host: String): Boolean {
-        val lowerHost = host.lowercase()
-        if (lowerHost == "localhost" ||
-            lowerHost.endsWith(".local") ||
-            lowerHost.endsWith(".localdomain") ||
-            lowerHost.endsWith(".lan") ||
-            lowerHost.endsWith(".home") ||
-            lowerHost.endsWith(".home.arpa") ||
-            lowerHost.endsWith(".ts.net") ||
-            lowerHost.endsWith(".mesh") ||
-            lowerHost.endsWith(".internal") ||
-            lowerHost.endsWith(".host") ||
-            lowerHost.endsWith(".priv") ||
-            !lowerHost.contains(".")
-        ) {
-            return true
-        }
-
-        if (lowerHost == "::1" || lowerHost.startsWith("fe80:") || lowerHost.startsWith("fd") || lowerHost.startsWith("fc")) {
-            return true
-        }
-
-        val parts = lowerHost.split('.')
-        if (parts.size != 4) return false
-        val octets = parts.map { it.toIntOrNull() ?: return false }
-
-        val first = octets[0]
-        val second = octets[1]
-
-        return first == 10 ||
-            (first == 172 && second in 16..31) ||
-            (first == 192 && second == 168) ||
-            (first == 127) ||
-            (first == 100 && second in 64..127)
     }
 
     private companion object {
@@ -1127,6 +1091,47 @@ class SubsonicApiClient internal constructor(
             .writeTimeout(15, TimeUnit.SECONDS)
             .build()
     }
+}
+
+internal fun isShenyeLocalAddress(address: String): Boolean {
+    val trimmed = address.trim()
+    val normalized = if (trimmed.contains("://")) trimmed else "http://$trimmed"
+    return normalized.toHttpUrlOrNull()?.host?.let(::isShenyeLocalHost) == true
+}
+
+private fun isShenyeLocalHost(host: String): Boolean {
+    val lowerHost = host.lowercase()
+    if (lowerHost.contains(':')) {
+        return lowerHost == "::1" || lowerHost.startsWith("fe80:") || lowerHost.startsWith("fd") || lowerHost.startsWith("fc")
+    }
+    if (lowerHost == "localhost" ||
+        lowerHost.endsWith(".local") ||
+        lowerHost.endsWith(".localdomain") ||
+        lowerHost.endsWith(".lan") ||
+        lowerHost.endsWith(".home") ||
+        lowerHost.endsWith(".home.arpa") ||
+        lowerHost.endsWith(".ts.net") ||
+        lowerHost.endsWith(".mesh") ||
+        lowerHost.endsWith(".internal") ||
+        lowerHost.endsWith(".host") ||
+        lowerHost.endsWith(".priv") ||
+        !lowerHost.contains(".")
+    ) {
+        return true
+    }
+
+    val parts = lowerHost.split('.')
+    if (parts.size != 4) return false
+    val octets = parts.map { it.toIntOrNull() ?: return false }
+
+    val first = octets[0]
+    val second = octets[1]
+
+    return first == 10 ||
+        (first == 172 && second in 16..31) ||
+        (first == 192 && second == 168) ||
+        (first == 127) ||
+        (first == 100 && second in 64..127)
 }
 
 private val LOWER_HEX_DIGITS = "0123456789abcdef".toCharArray()
