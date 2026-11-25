@@ -9,6 +9,7 @@
     android:minResizeHeight="90dp"
     android:maxResizeWidth="400dp"
     android:maxResizeHeight="400dp"
+    android:initialLayout="@layout/glance_default_loading_layout"
     android:previewImage="@drawable/widget_preview_stats_image"
     android:previewLayout="@layout/widget_preview_stats"
     android:resizeMode="horizontal|vertical"
