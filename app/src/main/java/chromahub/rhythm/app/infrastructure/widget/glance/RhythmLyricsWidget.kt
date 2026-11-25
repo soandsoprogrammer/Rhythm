@@ -323,7 +323,7 @@ class RhythmLyricsWidget : GlanceAppWidget() {
                                 )
                             } else {
                                 Text(
-                                    text = "♪ Instrumental",
+                                    text = "♪ ${LocalContext.current.getString(R.string.lyrics_instrumental)}",
                                     style = TextStyle(
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,

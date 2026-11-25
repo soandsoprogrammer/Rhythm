@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name_lyrics">Rhythm Lyrics</string>
+    <string name="widget_name_cookie">Rhythm Cookie</string>
+    <string name="widget_name_stats">Rhythm Stats</string>
+    <string name="external_play_audio_label">Play Audio</string>
+</resources>

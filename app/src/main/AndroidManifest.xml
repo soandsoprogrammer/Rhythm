@@ -115,7 +115,7 @@
         <receiver
             android:name=".infrastructure.widget.glance.RhythmLyricsWidgetReceiver"
             android:exported="true"
-            android:label="Rhythm Lyrics"
+            android:label="@string/widget_name_lyrics"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -129,7 +129,7 @@
         <receiver
             android:name=".infrastructure.widget.glance.RhythmCookieWidgetReceiver"
             android:exported="true"
-            android:label="Rhythm Cookie"
+            android:label="@string/widget_name_cookie"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -143,7 +143,7 @@
         <receiver
             android:name=".infrastructure.widget.glance.RhythmStatsWidgetReceiver"
             android:exported="true"
-            android:label="Rhythm Stats"
+            android:label="@string/widget_name_stats"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -240,7 +240,7 @@
         <activity
             android:name=".activities.ExternalPlaybackActivity"
             android:exported="true"
-            android:label="Play Audio"
+            android:label="@string/external_play_audio_label"
             android:theme="@style/Theme.Rhythm.Translucent"
             android:launchMode="singleTask"
             android:excludeFromRecents="false"

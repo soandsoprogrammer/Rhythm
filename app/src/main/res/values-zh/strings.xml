@@ -603,7 +603,7 @@
     <string name="miniplayer_swipe_left_hint">下一页 →</string>
     <string name="miniplayer_swipe_right_hint">← 上一页</string>
     <string name="miniplayer_no_song">没有播放歌曲</string>
-    <string name="badge_live">LIVE</string>
+    <string name="badge_live">直播</string>
     <!-- Festive Greetings -->
     <!-- Settings -->
     <string name="settings_tip_theme">使用颜色、字体和节日效果自定义您的主题</string>
@@ -798,7 +798,7 @@
     <string name="settings_library_tab_order_desc">选项卡排列</string>
     <string name="settings_section_user_interface">导航和控制</string>
     <string name="settings_language">语言</string>
-    <string name="settings_language_desc">英语、西班牙语</string>
+    <string name="settings_language_desc">更改应用语言</string>
     <string name="settings_haptic_feedback">触觉反馈</string>
     <string name="settings_haptic_feedback_desc">点击反馈</string>
     <string name="settings_section_queue_playback">队列与播放</string>
@@ -2274,7 +2274,7 @@
         <item quantity="other">将 %1$d 个播放列表导出到：</item>
     </plurals>
     <!-- Mode dialog strings -->
-    <string name="dialog_switch_to_go">Switch to Rhythm Go？</string>
+    <string name="dialog_switch_to_go">切换到 Rhythm Go？</string>
     <string name="dialog_switch_to_local">切换到本地？</string>
     <string name="dialog_switch_to_go_desc">This item belongs to Rhythm Go。现在切换到流媒体模式来进行流媒体播放吗？</string>
     <string name="dialog_switch_to_local_desc">该资料属于您的本地音乐库。立即切换到本地模式来播放离线曲目吗？</string>
@@ -2496,7 +2496,7 @@
     <string name="backup_restore_section_core_desc">主题、播放器、UI、API 和应用程序首选项。</string>
     <string name="backup_restore_section_collection">收藏</string>
     <string name="backup_restore_section_collection_desc">播放列表、收藏夹、黑名单/白名单、固定文件夹。</string>
-    <string name="backup_restore_section_insight">Insight</string>
+    <string name="backup_restore_section_insight">听歌统计</string>
     <string name="backup_restore_section_insight_desc">播放次数、每日统计数据、类型和 Rhythm Guard 配置。</string>
     <string name="backup_restore_status_included">包括</string>
     <string name="backup_restore_status_excluded">排除</string>

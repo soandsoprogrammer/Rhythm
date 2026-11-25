@@ -79,7 +79,7 @@ object LanguageHelper {
         LanguageOption("uk", "Ukrainian", "Українська", 74),
         LanguageOption("uz", "Uzbek", "Oʻzbekcha", 0),
         LanguageOption("vi", "Vietnamese", "Tiếng Việt", 74),
-        LanguageOption("zh", "Chinese (Simplified)", "简体中文", 78),
+        LanguageOption("zh", "Chinese (Simplified)", "简体中文", 100),
         LanguageOption("zh-TW", "Chinese (Traditional)", "繁體中文", 76)
     )
     
