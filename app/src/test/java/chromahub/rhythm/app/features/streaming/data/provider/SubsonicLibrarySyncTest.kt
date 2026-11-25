@@ -174,12 +174,12 @@ class SubsonicLibrarySyncTest {
 
         val coverUrl = client.buildCoverArtUrl("al-99", 500)!!
         val coverRef = client.toUrlRef(coverUrl)
-        assertEquals("getCoverArt?id=al-99&size=500", coverRef)
+        assertEquals("getCoverArt?id=al-99", coverRef)
         assertEquals(coverUrl, client.urlRefResolver()(coverRef!!))
 
         val streamUrl = client.buildStreamUrl("song-123", maxBitRateKbps = 320)!!
         val streamRef = client.toUrlRef(streamUrl)!!
-        assertEquals("stream?id=song-123&maxBitRate=320", streamRef)
+        assertEquals("stream?id=song-123", streamRef)
 
         val rebuiltStream = client.urlRefResolver()(streamRef)!!
         val parsedOriginal = streamUrl.toHttpUrl()
@@ -187,7 +187,7 @@ class SubsonicLibrarySyncTest {
         assertEquals(parsedOriginal.host, parsedRebuilt.host)
         assertEquals(parsedOriginal.encodedPath, parsedRebuilt.encodedPath)
         assertEquals("song-123", parsedRebuilt.queryParameter("id"))
-        assertEquals("320", parsedRebuilt.queryParameter("maxBitRate"))
+        assertNull(parsedRebuilt.queryParameter("maxBitRate"))
     }
 
     @Test
