@@ -82,6 +82,8 @@ object GlanceWidgetUpdater {
             putInt("repeat_mode", repeatMode)
         }
         
+        RhythmLyricsWidget.updatePlayback(appContext)
+
         // Update Glance widget state directly using Glance state system
         scope.launch {
             try {
@@ -145,31 +147,9 @@ object GlanceWidgetUpdater {
                     }
                 } catch (_: Exception) {}
                 
-                // Update RhythmLyricsWidget as well
-                val lyricGlanceIds = manager.getGlanceIds(RhythmLyricsWidget::class.java)
-                lyricGlanceIds.forEach { glanceId ->
-                    updateAppWidgetState(appContext, glanceId) { prefs ->
-                        if (song != null) {
-                            prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_SONG_TITLE)] = song.title
-                            prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_ARTIST_NAME)] = song.artist
-                            song.artworkUri?.let {
-                                prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_ARTWORK_URI)] = it.toString()
-                            } ?: prefs.remove(stringPreferencesKey(RhythmLyricsWidget.KEY_ARTWORK_URI))
-                        } else {
-                            prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_SONG_TITLE)] = "Rhythm"
-                            prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_ARTIST_NAME)] = ""
-                            prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_LYRIC_LINES)] = ""
-                            prefs[intPreferencesKey(RhythmLyricsWidget.KEY_ACTIVE_INDEX)] = -1
-                            prefs.remove(stringPreferencesKey(RhythmLyricsWidget.KEY_ARTWORK_URI))
-                        }
-                        prefs[booleanPreferencesKey(RhythmLyricsWidget.KEY_IS_PLAYING)] = isPlaying
-                    }
-                }
-                
                 // Force update all widgets
                 try { RhythmMusicWidget().updateAll(appContext) } catch (_: Exception) {}
                 try { RhythmCookieWidget().updateAll(appContext) } catch (_: Exception) {}
-                try { RhythmLyricsWidget().updateAll(appContext) } catch (_: Exception) {}
                 try { RhythmStatsWidget().updateAll(appContext) } catch (_: Exception) {}
 
                 // Update Quick Settings Tile
@@ -208,7 +188,7 @@ try {
         scope.launch {
             try { RhythmMusicWidget().updateAll(appContext) } catch (_: Exception) {}
             try { RhythmCookieWidget().updateAll(appContext) } catch (_: Exception) {}
-            try { RhythmLyricsWidget().updateAll(appContext) } catch (_: Exception) {}
+            RhythmLyricsWidget.updatePlayback(appContext, force = true)
             try { RhythmStatsWidget().updateAll(appContext) } catch (_: Exception) {}
         }
         
@@ -231,35 +211,6 @@ try {
         }
     }
     
-    /**
-     * Update lyrics widget with dynamic lyric lines and active index
-     */
-    fun updateLyrics(
-        context: Context,
-        lyricTexts: List<String>,
-        activeIndex: Int
-    ) {
-        val appContext = context.applicationContext
-        scope.launch {
-            try {
-                val manager = GlanceAppWidgetManager(appContext)
-                val glanceIds = manager.getGlanceIds(RhythmLyricsWidget::class.java)
-                if (glanceIds.isEmpty()) return@launch
-                
-                val joined = lyricTexts.joinToString("##LINE##")
-                glanceIds.forEach { glanceId ->
-                    updateAppWidgetState(appContext, glanceId) { prefs ->
-                        prefs[stringPreferencesKey(RhythmLyricsWidget.KEY_LYRIC_LINES)] = joined
-                        prefs[intPreferencesKey(RhythmLyricsWidget.KEY_ACTIVE_INDEX)] = activeIndex
-                    }
-                }
-                try { RhythmLyricsWidget().updateAll(appContext) } catch (_: Exception) {}
-            } catch (e: Exception) {
-                android.util.Log.e("GlanceWidgetUpdater", "Error updating lyrics widget", e)
-            }
-        }
-    }
-
     /**
      * Update launcher app shortcuts dynamically
      */

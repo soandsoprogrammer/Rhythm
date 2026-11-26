@@ -9,402 +9,190 @@
 
 package chromahub.rhythm.app.infrastructure.widget.glance
 
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
-import android.graphics.Bitmap
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.glance.ColorFilter
-import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
-import androidx.glance.GlanceTheme
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.LocalContext
-import androidx.glance.LocalSize
-import androidx.glance.action.actionStartActivity
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.provideContent
-import androidx.glance.background
-import androidx.glance.currentState
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Box
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxHeight
-import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
-import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.layout.width
-import androidx.glance.state.GlanceStateDefinition
-import androidx.glance.state.PreferencesGlanceStateDefinition
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
+import android.content.Intent
+import android.content.res.Configuration
+import android.os.Build
+import android.view.View
+import android.widget.RemoteViews
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.toArgb
 import chromahub.rhythm.app.R
 import chromahub.rhythm.app.activities.MainActivity
-import coil.request.ImageRequest
-import coil.size.Size
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
+import kotlin.math.roundToInt
 
-class RhythmLyricsWidget : GlanceAppWidget() {
+internal object RhythmLyricsWidget {
+    data class Lines(
+        val previous: String? = null,
+        val current: String? = null,
+        val next: String? = null,
+        val hasLyrics: Boolean = false
+    )
 
-    companion object {
-        const val KEY_LYRIC_LINES = "lyric_lines"
-        const val KEY_ACTIVE_INDEX = "active_index"
-        const val KEY_SONG_TITLE = "song_title"
-        const val KEY_ARTIST_NAME = "artist_name"
-        const val KEY_IS_PLAYING = "is_playing"
-        const val KEY_ARTWORK_URI = "artwork_uri"
+    private data class Playback(
+        val id: String,
+        val title: String,
+        val artist: String,
+        val isPlaying: Boolean
+    ) {
+        val hasSong: Boolean get() = id.isNotEmpty()
     }
 
-    override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
-    override val sizeMode = SizeMode.Exact
+    private var playback: Playback? = null
+    private var lines = Lines()
 
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        provideContent {
-            val currentPrefs = currentState<Preferences>()
-            val songTitle = currentPrefs[stringPreferencesKey(KEY_SONG_TITLE)] ?: ""
-            val artistName = currentPrefs[stringPreferencesKey(KEY_ARTIST_NAME)] ?: ""
-            val isPlaying = currentPrefs[booleanPreferencesKey(KEY_IS_PLAYING)] ?: false
-            val lyricLinesStr = currentPrefs[stringPreferencesKey(KEY_LYRIC_LINES)] ?: ""
-            val activeIndex = currentPrefs[intPreferencesKey(KEY_ACTIVE_INDEX)] ?: -1
-            val artworkUriString = currentPrefs[stringPreferencesKey(KEY_ARTWORK_URI)]
+    // A partial update needs a complete layout first. Keep the size of each layout
+    // we have rendered so line changes do not have to query widget options again.
+    private val renderedHeights = mutableMapOf<Int, Int>()
 
-            // Artwork loading with cache retained for background updating synchronization
-            var bitmap by remember(artworkUriString) {
-                mutableStateOf<Bitmap?>(artworkUriString?.let { RhythmMusicWidget.getCachedBitmap(it) })
-            }
+    @Synchronized
+    fun updatePlayback(context: Context, force: Boolean = false) {
+        val newPlayback = readPlayback(context)
+        if (newPlayback.id != playback?.id) lines = Lines()
+        if (force || newPlayback != playback) {
+            playback = newPlayback
+            val manager = AppWidgetManager.getInstance(context)
+            renderFull(context, manager, ids(context, manager), newPlayback)
+        }
+    }
 
-            if (bitmap == null && !artworkUriString.isNullOrBlank()) {
-                val glanceContext = LocalContext.current
-                LaunchedEffect(artworkUriString) {
-                    try {
-                        val loaded = withContext(Dispatchers.IO) {
-                            val imageLoader = coil.Coil.imageLoader(glanceContext)
-                            val request = ImageRequest.Builder(glanceContext)
-                                .data(artworkUriString)
-                                .size(Size(120, 120))
-                                .build()
-                            val result = imageLoader.execute(request)
-                            val loadedBmp = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                            if (loadedBmp != null) {
-                                RhythmMusicWidget.cacheBitmap(artworkUriString, loadedBmp)
-                            }
-                            loadedBmp
-                        }
-                        if (loaded != null) {
-                            bitmap = loaded
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("RhythmLyricsWidget", "Error loading artwork", e)
-                    }
-                }
-            }
+    @Synchronized
+    fun updateLyrics(context: Context, newLines: Lines) {
+        val previousPlayback = playback
+        val newPlayback = previousPlayback ?: readPlayback(context)
+        val displayLines = if (newPlayback.hasSong) newLines else Lines()
+        if (displayLines == lines && previousPlayback != null) return
+        playback = newPlayback
+        lines = displayLines
 
-            val currentSize = LocalSize.current
-
-            GlanceTheme {
-                WidgetContent(
-                    songTitle = songTitle,
-                    artistName = artistName,
-                    isPlaying = isPlaying,
-                    lyricLinesStr = lyricLinesStr,
-                    activeIndex = activeIndex,
-                    size = currentSize
-                )
+        val manager = AppWidgetManager.getInstance(context)
+        for (id in ids(context, manager)) {
+            val height = renderedHeights[id]
+            if (height == null) {
+                renderFull(context, manager, intArrayOf(id), newPlayback)
+            } else {
+                val update = newViews(context)
+                update.setLyrics(context, newPlayback.hasSong, height)
+                manager.partiallyUpdateAppWidget(intArrayOf(id), update)
             }
         }
     }
 
-    @Composable
-    private fun PlayPauseButton(
-        modifier: GlanceModifier = GlanceModifier,
-        isPlaying: Boolean,
-        iconColor: ColorProvider = GlanceTheme.colors.onPrimary,
-        backgroundColor: ColorProvider = GlanceTheme.colors.primary,
-        iconSize: androidx.compose.ui.unit.Dp = 24.dp,
-        cornerRadius: androidx.compose.ui.unit.Dp = 24.dp
+    @Synchronized
+    fun render(context: Context, manager: AppWidgetManager, widgetIds: IntArray) {
+        val newPlayback = readPlayback(context)
+        if (newPlayback.id != playback?.id) lines = Lines()
+        playback = newPlayback
+        renderFull(context, manager, widgetIds, newPlayback)
+    }
+
+    @Synchronized
+    fun forget(widgetIds: IntArray) {
+        widgetIds.forEach { renderedHeights.remove(it) }
+    }
+
+    private fun readPlayback(context: Context): Playback {
+        val prefs = context.getSharedPreferences("widget_prefs", Context.MODE_PRIVATE)
+        return Playback(
+            id = prefs.getString(RhythmMusicWidget.KEY_SONG_ID, "").orEmpty(),
+            title = prefs.getString(RhythmMusicWidget.KEY_SONG_TITLE, "").orEmpty(),
+            artist = prefs.getString(RhythmMusicWidget.KEY_ARTIST_NAME, "").orEmpty(),
+            isPlaying = prefs.getBoolean(RhythmMusicWidget.KEY_IS_PLAYING, false)
+        )
+    }
+
+    private fun ids(context: Context, manager: AppWidgetManager): IntArray =
+        manager.getAppWidgetIds(ComponentName(context, RhythmLyricsWidgetReceiver::class.java))
+
+    private fun newViews(context: Context): RemoteViews =
+        RemoteViews(context.packageName, R.layout.widget_lyrics)
+
+    private fun renderFull(
+        context: Context,
+        manager: AppWidgetManager,
+        widgetIds: IntArray,
+        state: Playback
     ) {
-        Box(
-            modifier = modifier
-                .background(backgroundColor)
-                .cornerRadius(cornerRadius)
-                .clickable(actionRunCallback<PlayPauseAction>()),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                provider = ImageProvider(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow),
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                modifier = GlanceModifier.size(iconSize),
-                colorFilter = ColorFilter.tint(iconColor)
+        for (id in widgetIds) {
+            val height = manager.getAppWidgetOptions(id)
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 120)
+            val view = newViews(context)
+            val padding = ((if (height < 120) 6 else 10) * context.resources.displayMetrics.density).roundToInt()
+            view.setViewPadding(R.id.lyrics_widget_content, padding, padding, padding, padding)
+            view.setTextViewText(R.id.lyrics_widget_title, if (state.hasSong) state.title else context.getString(R.string.app_name))
+            view.setViewVisibility(R.id.lyrics_widget_title, visibility(height >= 92))
+            view.setTextViewText(R.id.lyrics_widget_artist, state.artist)
+            view.setViewVisibility(R.id.lyrics_widget_artist, visibility(height >= 120 && state.hasSong && state.artist.isNotBlank()))
+            view.setViewVisibility(R.id.lyrics_widget_controls, visibility(height >= 68 && state.hasSong))
+            view.setImageViewResource(R.id.lyrics_widget_play_icon, if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow)
+            view.setContentDescription(
+                R.id.lyrics_widget_play_pause,
+                context.getString(if (state.isPlaying) R.string.action_pause else R.string.action_play)
             )
-        }
-    }
-
-    @Composable
-    private fun NextButton(
-        modifier: GlanceModifier = GlanceModifier,
-        iconColor: ColorProvider = GlanceTheme.colors.onTertiary,
-        backgroundColor: ColorProvider = GlanceTheme.colors.tertiary,
-        iconSize: androidx.compose.ui.unit.Dp = 24.dp,
-        cornerRadius: androidx.compose.ui.unit.Dp = 24.dp
-    ) {
-        Box(
-            modifier = modifier
-                .background(backgroundColor)
-                .cornerRadius(cornerRadius)
-                .clickable(actionRunCallback<SkipNextAction>()),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                provider = ImageProvider(R.drawable.ic_skip_next),
-                contentDescription = LocalContext.current.getString(R.string.onboarding_next),
-                modifier = GlanceModifier.size(iconSize),
-                colorFilter = ColorFilter.tint(iconColor)
+            view.setLyrics(context, state.hasSong, height)
+            view.setColors(context)
+            view.setOnClickPendingIntent(
+                R.id.lyrics_widget_content,
+                PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             )
+            view.setOnClickPendingIntent(R.id.lyrics_widget_play_pause, playbackAction(context, MediaPlaybackService.ACTION_PLAY_PAUSE))
+            view.setOnClickPendingIntent(R.id.lyrics_widget_previous, playbackAction(context, MediaPlaybackService.ACTION_SKIP_PREVIOUS))
+            view.setOnClickPendingIntent(R.id.lyrics_widget_next, playbackAction(context, MediaPlaybackService.ACTION_SKIP_NEXT))
+
+            manager.updateAppWidget(intArrayOf(id), view)
+            renderedHeights[id] = height
         }
     }
 
-    @Composable
-    private fun PreviousButton(
-        modifier: GlanceModifier = GlanceModifier,
-        iconColor: ColorProvider = GlanceTheme.colors.onTertiary,
-        backgroundColor: ColorProvider = GlanceTheme.colors.tertiary,
-        iconSize: androidx.compose.ui.unit.Dp = 24.dp,
-        cornerRadius: androidx.compose.ui.unit.Dp = 24.dp
-    ) {
-        Box(
-            modifier = modifier
-                .background(backgroundColor)
-                .cornerRadius(cornerRadius)
-                .clickable(actionRunCallback<SkipPreviousAction>()),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                provider = ImageProvider(R.drawable.ic_skip_previous),
-                contentDescription = LocalContext.current.getString(R.string.animatedplaybackcontrols_previous),
-                modifier = GlanceModifier.size(iconSize),
-                colorFilter = ColorFilter.tint(iconColor)
-            )
+    private fun RemoteViews.setLyrics(context: Context, hasSong: Boolean, height: Int) {
+        val current = when {
+            !hasSong -> context.getString(R.string.rhythmlyricswidget_open_to_play)
+            !lines.hasLyrics -> context.getString(R.string.rhythmlyricswidget_no_lyrics_available)
+            else -> lines.current ?: "♪ " + context.getString(R.string.lyrics_instrumental)
         }
+        setTextViewText(R.id.lyrics_widget_current_line, current)
+        setTextViewText(R.id.lyrics_widget_previous_line, lines.previous.orEmpty())
+        setTextViewText(R.id.lyrics_widget_next_line, lines.next.orEmpty())
+        setViewVisibility(R.id.lyrics_widget_previous_line, visibility(height >= 150 && hasSong && lines.previous != null))
+        setViewVisibility(R.id.lyrics_widget_next_line, visibility(height >= 150 && hasSong && lines.next != null))
     }
 
-    @Composable
-    private fun WidgetContent(
-        songTitle: String,
-        artistName: String,
-        isPlaying: Boolean,
-        lyricLinesStr: String,
-        activeIndex: Int,
-        size: DpSize
-    ) {
-        val lines = if (lyricLinesStr.isNotEmpty()) lyricLinesStr.split("##LINE##") else emptyList()
-        val prevLine = if (activeIndex > 0) lines.getOrNull(activeIndex - 1) else null
-        val activeLine = lines.getOrNull(activeIndex)
-        val nextLine = lines.getOrNull(activeIndex + 1)
-        val hasSong = songTitle.isNotBlank() && songTitle != LocalContext.current.getString(R.string.app_name)
-        val isCompact = size.height < 120.dp
-
-        Box(
-            modifier = GlanceModifier
-                .fillMaxSize()
-                .cornerRadius(28.dp)
-                .background(GlanceTheme.colors.widgetBackground)
-        ) {
-
-            // Main content container utilizing the full widget width
-            Column(
-                modifier = GlanceModifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.Vertical.CenterVertically
-            ) {
-                // App branding row (always shown)
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        provider = ImageProvider(R.drawable.ic_notification),
-                        contentDescription = LocalContext.current.getString(R.string.app_name),
-                        modifier = GlanceModifier.size(14.dp),
-                        colorFilter = ColorFilter.tint(GlanceTheme.colors.primary)
-                    )
-                    Spacer(GlanceModifier.width(5.dp))
-                    Text(
-                        text = LocalContext.current.getString(R.string.app_name),
-                        style = TextStyle(
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GlanceTheme.colors.primary
-                        ),
-                        maxLines = 1
-                    )
-                }
-
-                Spacer(GlanceModifier.height(6.dp))
-
-                // Song info row
-                if (hasSong) {
-                    Text(
-                        text = songTitle,
-                        style = TextStyle(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GlanceTheme.colors.onSurface
-                        ),
-                        maxLines = 1
-                    )
-                    if (artistName.isNotEmpty()) {
-                        Text(
-                            text = artistName,
-                            style = TextStyle(
-                                fontSize = 13.sp,
-                                color = GlanceTheme.colors.onSurfaceVariant
-                            ),
-                            maxLines = 1
-                        )
-                    }
-                    Spacer(GlanceModifier.height(6.dp))
-                }
-
-                // Lyrics area
-                Column(
-                    modifier = GlanceModifier
-                        .defaultWeight()
-                        .fillMaxWidth()
-                        .clickable(actionStartActivity<MainActivity>()),
-                    verticalAlignment = Alignment.Vertical.CenterVertically,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (hasSong) {
-                        if (lines.isNotEmpty()) {
-                            if (!isCompact && prevLine != null) {
-                                Text(
-                                    text = prevLine,
-                                    style = TextStyle(
-                                        fontSize = 12.sp,
-                                        color = GlanceTheme.colors.onSurfaceVariant
-                                    ),
-                                    maxLines = 1,
-                                    modifier = GlanceModifier.padding(vertical = 1.dp)
-                                )
-                            }
-                            if (activeLine != null) {
-                                Text(
-                                    text = activeLine,
-                                    style = TextStyle(
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = GlanceTheme.colors.primary
-                                    ),
-                                    maxLines = if (isCompact) 1 else 2,
-                                    modifier = GlanceModifier.padding(vertical = 2.dp)
-                                )
-                            } else {
-                                Text(
-                                    text = "♪ ${LocalContext.current.getString(R.string.lyrics_instrumental)}",
-                                    style = TextStyle(
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = GlanceTheme.colors.primary
-                                    ),
-                                    maxLines = 1
-                                )
-                            }
-                            if (!isCompact && nextLine != null) {
-                                Text(
-                                    text = nextLine,
-                                    style = TextStyle(
-                                        fontSize = 12.sp,
-                                        color = GlanceTheme.colors.onSurfaceVariant
-                                    ),
-                                    maxLines = 1,
-                                    modifier = GlanceModifier.padding(vertical = 1.dp)
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = LocalContext.current.getString(R.string.rhythmlyricswidget_no_lyrics_available),
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    color = GlanceTheme.colors.onSurfaceVariant
-                                ),
-                                maxLines = 1
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = LocalContext.current.getString(R.string.rhythmlyricswidget_tagline),
-                            style = TextStyle(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GlanceTheme.colors.onSurfaceVariant
-                            ),
-                            maxLines = 1
-                        )
-                        Spacer(GlanceModifier.height(3.dp))
-                        Text(
-                            text = LocalContext.current.getString(R.string.rhythmlyricswidget_open_to_play),
-                            style = TextStyle(
-                                fontSize = 11.sp,
-                                color = GlanceTheme.colors.onSurfaceVariant
-                                ),
-                                maxLines = 1
-                            )
-                        }
-                    }
-
-                    // Controls row (only when song is playing)
-                    if (hasSong) {
-                        Spacer(GlanceModifier.height(6.dp))
-                        Row(
-                            modifier = GlanceModifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            PreviousButton(
-                                modifier = GlanceModifier.size(36.dp),
-                                iconSize = 20.dp,
-                                cornerRadius = 18.dp
-                            )
-                            Spacer(GlanceModifier.width(10.dp))
-                            val playButtonCornerRadius = if (isPlaying) 14.dp else 24.dp
-                            PlayPauseButton(
-                                modifier = GlanceModifier.size(40.dp),
-                                isPlaying = isPlaying,
-                                iconSize = 22.dp,
-                                cornerRadius = playButtonCornerRadius
-                            )
-                            Spacer(GlanceModifier.width(10.dp))
-                            NextButton(
-                                modifier = GlanceModifier.size(36.dp),
-                                iconSize = 20.dp,
-                                cornerRadius = 18.dp
-                            )
-                        }
-                    }
-                }
-            }
+    private fun RemoteViews.setColors(context: Context) {
+        val night = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_YES
+        val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (night) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            if (night) darkColorScheme() else lightColorScheme()
         }
+        setInt(R.id.lyrics_widget_background, "setColorFilter", colors.surfaceContainer.toArgb())
+        setTextColor(R.id.lyrics_widget_title, colors.onSurface.toArgb())
+        setTextColor(R.id.lyrics_widget_artist, colors.onSurfaceVariant.toArgb())
+        setTextColor(R.id.lyrics_widget_current_line, colors.primary.toArgb())
+        setTextColor(R.id.lyrics_widget_previous_line, colors.onSurfaceVariant.toArgb())
+        setTextColor(R.id.lyrics_widget_next_line, colors.onSurfaceVariant.toArgb())
+        setInt(R.id.lyrics_widget_previous_background, "setColorFilter", colors.tertiary.toArgb())
+        setInt(R.id.lyrics_widget_next_background, "setColorFilter", colors.tertiary.toArgb())
+        setInt(R.id.lyrics_widget_previous_icon, "setColorFilter", colors.onTertiary.toArgb())
+        setInt(R.id.lyrics_widget_next_icon, "setColorFilter", colors.onTertiary.toArgb())
+        setInt(R.id.lyrics_widget_play_background, "setColorFilter", colors.primary.toArgb())
+        setInt(R.id.lyrics_widget_play_icon, "setColorFilter", colors.onPrimary.toArgb())
     }
+
+    private fun playbackAction(context: Context, action: String): PendingIntent =
+        PendingIntent.getService(
+            context,
+            0,
+            Intent(context, MediaPlaybackService::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+    private fun visibility(show: Boolean): Int = if (show) View.VISIBLE else View.GONE
+}

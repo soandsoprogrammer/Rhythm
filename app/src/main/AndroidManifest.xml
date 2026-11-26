@@ -111,7 +111,7 @@
                 android:resource="@xml/widget_info_glance" />
         </receiver>
 
-        <!-- Lyric Widget Provider (Glance-based) -->
+        <!-- Lyric Widget Provider -->
         <receiver
             android:name=".infrastructure.widget.glance.RhythmLyricsWidgetReceiver"
             android:exported="true"

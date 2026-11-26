@@ -9,7 +9,7 @@
     android:minResizeHeight="48dp"
     android:maxResizeWidth="800dp"
     android:maxResizeHeight="800dp"
-    android:initialLayout="@layout/glance_default_loading_layout"
+    android:initialLayout="@layout/widget_lyrics"
     android:previewImage="@drawable/widget_preview_lyrics_image"
     android:previewLayout="@layout/widget_preview_lyrics"
     android:resizeMode="horizontal|vertical"

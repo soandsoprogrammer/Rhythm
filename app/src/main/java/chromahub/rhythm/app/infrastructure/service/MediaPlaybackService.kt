@@ -51,6 +51,7 @@ import chromahub.rhythm.app.infrastructure.service.player.MissingLocalMediaClass
 import chromahub.rhythm.app.infrastructure.service.util.RhythmBitmapLoader
 import chromahub.rhythm.app.core.device.HiFiCapabilityChecker
 import chromahub.rhythm.app.core.device.DeviceCapabilitiesProvider
+import chromahub.rhythm.app.infrastructure.widget.glance.RhythmLyricsWidget
 import chromahub.rhythm.app.infrastructure.widget.WidgetUpdater
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -183,26 +184,34 @@ class MediaPlaybackService : MediaLibraryService(), Player.Listener {
     var currentPlainLyricsLines: List<String> = emptyList()
     var currentLyricIndex: Int = -1
 
-    private fun getProcessedLyricTexts(): List<String> {
+    private fun updateWidgetLyrics() {
         val showTranslation = appSettings.showLyricsTranslation.value
         val showRomanization = appSettings.showLyricsRomanization.value
-        
-        return currentLyricTexts.mapIndexed { index, text ->
-            val translation = currentLyricTranslations.getOrNull(index)
-            val romanization = currentLyricRomanizations.getOrNull(index)
-            
-            buildString {
+        fun textAt(index: Int): String? {
+            val text = currentLyricTexts.getOrNull(index) ?: return null
+            return buildString {
                 append(text)
+                val translation = currentLyricTranslations.getOrNull(index)
                 if (showTranslation && !translation.isNullOrBlank()) {
-                    append("\n")
+                    append('\n')
                     append(translation)
                 }
+                val romanization = currentLyricRomanizations.getOrNull(index)
                 if (showRomanization && !romanization.isNullOrBlank()) {
-                    append("\n")
+                    append('\n')
                     append(romanization)
                 }
             }
         }
+        RhythmLyricsWidget.updateLyrics(
+            this,
+            RhythmLyricsWidget.Lines(
+                previous = textAt(currentLyricIndex - 1),
+                current = textAt(currentLyricIndex),
+                next = textAt(currentLyricIndex + 1),
+                hasLyrics = currentLyricTexts.isNotEmpty()
+            )
+        )
     }
 
     private fun clearLyricsState() {
@@ -212,7 +221,7 @@ class MediaPlaybackService : MediaLibraryService(), Player.Listener {
         currentLyricTimestamps = longArrayOf()
         currentPlainLyricsLines = emptyList()
         currentLyricIndex = -1
-        chromahub.rhythm.app.infrastructure.widget.glance.GlanceWidgetUpdater.updateLyrics(this, emptyList(), -1)
+        updateWidgetLyrics()
     }
 
     private val btReceiver = object : BroadcastReceiver() {
@@ -1294,11 +1303,7 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
                 appSettings.showLyricsRomanization
             ) { _, _ -> }.collect {
                 if (currentLyricTexts.isNotEmpty()) {
-                    chromahub.rhythm.app.infrastructure.widget.glance.GlanceWidgetUpdater.updateLyrics(
-                        this@MediaPlaybackService,
-                        getProcessedLyricTexts(),
-                        currentLyricIndex
-                    )
+                    updateWidgetLyrics()
                 }
             }
         }
@@ -2621,7 +2626,7 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
                         }
                         
                         currentLyricIndex = -1
-                        chromahub.rhythm.app.infrastructure.widget.glance.GlanceWidgetUpdater.updateLyrics(this@MediaPlaybackService, getProcessedLyricTexts(), -1)
+                        updateWidgetLyrics()
                         SessionResult(SessionResult.RESULT_SUCCESS)
                     }
 
@@ -2631,7 +2636,7 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
                         currentLyricIndex = lyricIndex
                         
                         // Update widgets
-                        chromahub.rhythm.app.infrastructure.widget.glance.GlanceWidgetUpdater.updateLyrics(this@MediaPlaybackService, getProcessedLyricTexts(), lyricIndex)
+                        updateWidgetLyrics()
                         
                         // Update Bluetooth metadata lyrics
                         if (appSettings.bluetoothLyricsEnabled.value) {

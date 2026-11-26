@@ -9,9 +9,26 @@
 
 package chromahub.rhythm.app.infrastructure.widget.glance
 
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.Context
+import android.os.Bundle
 
-class RhythmLyricsWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = RhythmLyricsWidget()
+class RhythmLyricsWidgetReceiver : AppWidgetProvider() {
+    override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
+        RhythmLyricsWidget.render(context, manager, appWidgetIds)
+    }
+
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        manager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle
+    ) {
+        RhythmLyricsWidget.render(context, manager, intArrayOf(appWidgetId))
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        RhythmLyricsWidget.forget(appWidgetIds)
+    }
 }

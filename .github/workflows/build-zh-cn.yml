@@ -28,7 +28,7 @@ jobs:
       - name: Check server syntax
         run: node --check server/shenye-server.mjs
       - name: Build GitHub release APK
-        run: bash gradlew :app:assembleGithubRelease -PversionCodeOverride=565061361 -PversionNameOverride=5.6.506.1361 --stacktrace
+        run: bash gradlew :app:assembleGithubRelease -PversionCodeOverride=565061362 -PversionNameOverride=5.6.506.1362 --stacktrace
       - name: Verify and prepare universal APK
         shell: bash
         run: |

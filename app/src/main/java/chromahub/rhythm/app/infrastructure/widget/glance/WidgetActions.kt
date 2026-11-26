@@ -16,7 +16,6 @@ import androidx.glance.appwidget.updateAll
 import chromahub.rhythm.app.activities.MainActivity
 import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
 import chromahub.rhythm.app.infrastructure.widget.glance.RhythmMusicWidget
-import chromahub.rhythm.app.infrastructure.widget.glance.RhythmLyricsWidget
 import kotlinx.coroutines.delay
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -75,7 +74,6 @@ class PlayPauseAction : ActionCallback {
         // Trigger immediate widget update after short delay for state change
         delay(100)
         try { RhythmMusicWidget().updateAll(context) } catch (_: Exception) {}
-        try { RhythmLyricsWidget().updateAll(context) } catch (_: Exception) {}
     }
 }
 
@@ -98,7 +96,6 @@ class SkipNextAction : ActionCallback {
         // Trigger immediate widget update after short delay for state change
         delay(100)
         try { RhythmMusicWidget().updateAll(context) } catch (_: Exception) {}
-        try { RhythmLyricsWidget().updateAll(context) } catch (_: Exception) {}
     }
 }
 
@@ -121,7 +118,6 @@ class SkipPreviousAction : ActionCallback {
         // Trigger immediate widget update after short delay for state change
         delay(100)
         try { RhythmMusicWidget().updateAll(context) } catch (_: Exception) {}
-        try { RhythmLyricsWidget().updateAll(context) } catch (_: Exception) {}
     }
 }
 
