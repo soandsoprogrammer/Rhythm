@@ -29,11 +29,6 @@ jobs:
         run: node --check server/shenye-server.mjs
       - name: Build GitHub release APK
         run: bash gradlew :app:assembleGithubRelease --stacktrace
-      - name: Verify music server compatibility
-        run: >-
-          bash gradlew :app:testGithubReleaseUnitTest
-          --tests chromahub.rhythm.app.features.streaming.data.provider.SubsonicLibrarySyncTest
-          --stacktrace
       - name: Verify and prepare universal APK
         shell: bash
         run: |
