@@ -47,7 +47,8 @@ class SubsonicApiClient internal constructor(
 
     private enum class ServerProtocol(val path: String, val suffix: String, val responseKey: String) {
         SHENYE("/shenye/v1/", "", "shenye"),
-        SUBSONIC("/rest/", ".view", "subsonic-response")
+        SUBSONIC("/rest/", ".view", "subsonic-response"),
+        WEBDAV("", "", "")
     }
 
     private data class Credentials(
@@ -55,7 +56,13 @@ class SubsonicApiClient internal constructor(
         val username: String,
         val password: String,
         val protocol: ServerProtocol
-    )
+    ) {
+        val webDav: WebDavMusicClient.Connection? by lazy {
+            if (protocol == ServerProtocol.WEBDAV) {
+                WebDavMusicClient.musicFolder(serverUrl)?.let { WebDavMusicClient.Connection(it, username, password) }
+            } else null
+        }
+    }
 
     private class UnsupportedServerProtocol : Exception("Unsupported music server response")
 
@@ -67,6 +74,27 @@ class SubsonicApiClient internal constructor(
     @Volatile
     private var credentials: Credentials? = loadCredentials()
 
+    private val webDav = WebDavMusicClient(context)
+
+    fun webDavCacheKey(): String? = webDavConnection()?.key
+
+    private fun webDavConnection(): WebDavMusicClient.Connection? = credentials?.webDav
+
+    internal fun webDavAccess(url: String): WebDavMediaAccess? {
+        val connection = webDavConnection() ?: return null
+        val target = url.toHttpUrlOrNull() ?: return null
+        if (!connection.contains(target)) return null
+        return WebDavMediaAccess(connection.authorization, connection.trackId(target))
+    }
+
+    fun cachedWebDavUrl(id: String, cached: String?): String? =
+        webDavConnection()?.let { webDav.url(it, id, cached) }
+
+    suspend fun refreshWebDavLibrary(onProgress: ((Int, Int, Int) -> Unit)?): Result<List<ProviderSong>> {
+        val connection = webDavConnection() ?: return Result.failure(IllegalStateException("WebDAV is disconnected"))
+        return webDav.catalog(connection, refresh = true, onProgress = onProgress).map { it.songs }
+    }
+
     fun isConnected(): Boolean = credentials?.let { it.serverUrl.isNotBlank() && it.username.isNotBlank() && it.password.isNotBlank() } == true
 
     fun getServerUrl(): String = credentials?.serverUrl.orEmpty()
@@ -77,7 +105,8 @@ class SubsonicApiClient internal constructor(
         serverUrl: String,
         username: String,
         password: String,
-        saveCredentials: Boolean = true
+        saveCredentials: Boolean = true,
+        useWebDav: Boolean = false
     ): Result<ProviderConnectionResult> {
         val normalizedUrl = normalizeServerUrl(serverUrl)
         val validationError = validateServerUrl(normalizedUrl)
@@ -91,30 +120,47 @@ class SubsonicApiClient internal constructor(
             return Result.failure(IllegalArgumentException("Password is required"))
         }
 
-        val shenye = Credentials(normalizedUrl, username.trim(), password, ServerProtocol.SHENYE)
-        val shenyeResult = authenticate(shenye)
-        val failure = shenyeResult.exceptionOrNull()
-        val loginResult = if (failure is UnsupportedServerProtocol ||
-            (failure is MusicServerHttpException && (failure.statusCode == 404 || failure.statusCode == 405))
-        ) {
-            authenticate(shenye.copy(protocol = ServerProtocol.SUBSONIC))
+        val candidate = Credentials(normalizedUrl, username.trim(), password, ServerProtocol.SHENYE)
+        val loginResult = if (useWebDav || WebDavMusicClient.isNutstoreAddress(normalizedUrl)) {
+            val dav = candidate.copy(protocol = ServerProtocol.WEBDAV)
+            val connection = dav.webDav ?: return Result.failure(
+                IllegalArgumentException(context.getString(chromahub.rhythm.app.R.string.shenye_webdav_folder_required))
+            )
+            webDav.check(connection).map { dav.copy(serverUrl = connection.root.toString()) }
         } else {
-            shenyeResult
+            authenticateMusicServer(candidate)
         }
 
-        return loginResult.map { candidate ->
+        return loginResult.mapCatching { connected ->
+            val storedPassword = if (saveCredentials && connected.protocol == ServerProtocol.WEBDAV) {
+                WebDavPassword.encrypt(connected.password)
+            } else {
+                connected.password
+            }
             if (saveCredentials) {
                 prefs.edit {
-                    putString(KEY_SERVER_URL, normalizedUrl)
-                    putString(KEY_USERNAME, candidate.username)
-                    putString(KEY_PASSWORD, candidate.password)
-                    putString(KEY_PROTOCOL, candidate.protocol.name)
+                    putString(KEY_SERVER_URL, connected.serverUrl)
+                    putString(KEY_USERNAME, connected.username)
+                    putString(KEY_PASSWORD, storedPassword)
+                    putString(KEY_PROTOCOL, connected.protocol.name)
                 }
             } else {
                 prefs.edit { clear() }
             }
-            credentials = candidate
-            ProviderConnectionResult(displayName = candidate.username, serverUrl = normalizedUrl)
+            credentials = connected
+            ProviderConnectionResult(displayName = connected.username, serverUrl = connected.serverUrl)
+        }
+    }
+
+    private suspend fun authenticateMusicServer(shenye: Credentials): Result<Credentials> {
+        val result = authenticate(shenye)
+        val failure = result.exceptionOrNull()
+        return if (failure is UnsupportedServerProtocol ||
+            (failure is MusicServerHttpException && (failure.statusCode == 404 || failure.statusCode == 405))
+        ) {
+            authenticate(shenye.copy(protocol = ServerProtocol.SUBSONIC))
+        } else {
+            result
         }
     }
 
@@ -130,10 +176,18 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun ping(): Result<Boolean> {
+        webDavConnection()?.let { return webDav.check(it) }
         return requestAndParse("ping").map { true }
     }
 
     suspend fun searchSongs(query: String, limit: Int = 30): Result<List<ProviderSong>> {
+        webDavConnection()?.let { connection ->
+            return webDav.catalog(connection).map { catalog ->
+                catalog.songs.filter { song ->
+                    song.title.contains(query, true) || song.artist.contains(query, true) || song.album.contains(query, true)
+                }.take(limit)
+            }
+        }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -151,6 +205,11 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun searchAlbums(query: String, limit: Int = 30): Result<List<ProviderAlbum>> {
+        webDavConnection()?.let { connection ->
+            return webDav.catalog(connection).map { catalog ->
+                catalog.albums.filter { it.title.contains(query, true) || it.artist.contains(query, true) }.take(limit)
+            }
+        }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -168,6 +227,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getArtists(): Result<List<ProviderArtist>> {
+        webDavConnection()?.let { return webDav.catalog(it).map(WebDavMusicClient.Catalog::artists) }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -195,6 +255,9 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun searchArtists(query: String, limit: Int = 30): Result<List<ProviderArtist>> {
+        webDavConnection()?.let { connection ->
+            return webDav.catalog(connection).map { catalog -> catalog.artists.filter { it.name.contains(query, true) }.take(limit) }
+        }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -248,6 +311,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getRandomSongs(limit: Int = 50): Result<List<ProviderSong>> {
+        webDavConnection()?.let { return webDav.catalog(it).map { catalog -> catalog.songs.shuffled().take(limit) } }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -262,6 +326,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getAlbumList(type: String = "newest", limit: Int = 50): Result<List<ProviderAlbum>> {
+        webDavConnection()?.let { return webDav.catalog(it).map { catalog -> catalog.albums.take(limit) } }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -396,6 +461,7 @@ class SubsonicApiClient internal constructor(
      * Costs two small requests regardless of library size.
      */
     suspend fun getLibraryMarker(): String? {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return null
         if (!isConnected()) return null
         // A far-future ifModifiedSince makes the server omit the artist index and return
         // only `lastModified`, so this stays a tiny request even for huge libraries.
@@ -440,6 +506,7 @@ class SubsonicApiClient internal constructor(
      * so this stays a tiny request even for huge libraries.
      */
     suspend fun getLibraryLastModified(): Long? {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return null
         if (!isConnected()) return null
         val farFuture = System.currentTimeMillis() + 365L * 24 * 60 * 60 * 1000
         return requestAndParse("getIndexes", mapOf("ifModifiedSince" to farFuture.toString()))
@@ -450,6 +517,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getPlaylists(limit: Int = 100): Result<List<ProviderPlaylist>> {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return Result.success(emptyList())
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -461,6 +529,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun searchPlaylists(query: String, limit: Int = 30): Result<List<ProviderPlaylist>> {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return Result.success(emptyList())
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -488,6 +557,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getAlbumSongs(albumId: String, limit: Int = 500): Result<List<ProviderSong>> {
+        webDavConnection()?.let { return webDav.catalog(it).map { catalog -> catalog.songsByAlbum[albumId].orEmpty().take(limit) } }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -501,6 +571,9 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getAlbumById(albumId: String): Result<ProviderAlbum> {
+        webDavConnection()?.let { connection ->
+            return webDav.catalog(connection).mapCatching { catalog -> catalog.albums.first { it.providerId == albumId } }
+        }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -524,6 +597,11 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun getArtistAlbums(artistQuery: String, limit: Int = 50): Result<List<ProviderAlbum>> {
+        webDavConnection()?.let { connection ->
+            return webDav.catalog(connection).map { catalog ->
+                catalog.albums.filter { it.artist.equals(artistQuery, ignoreCase = true) }.take(limit)
+            }
+        }
         if (!isConnected()) {
             return Result.failure(IllegalStateException("Music server is not connected"))
         }
@@ -586,6 +664,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun markFavorite(id: String, isFavorite: Boolean): Result<Boolean> {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return Result.success(true)
         if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
 
@@ -594,6 +673,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun scrobble(id: String, submission: Boolean): Result<Boolean> {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return Result.success(false)
         if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
 
@@ -604,6 +684,7 @@ class SubsonicApiClient internal constructor(
     }
 
     suspend fun reportPlaybackProgress(id: String, positionMs: Long, isPaused: Boolean): Result<Boolean> {
+        if (credentials?.protocol == ServerProtocol.WEBDAV) return Result.success(false)
         if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
 
@@ -815,10 +896,10 @@ class SubsonicApiClient internal constructor(
     private fun mediaUrl(endpoint: String, id: String, subsonicParams: Map<String, String>): String? {
         val cred = credentials ?: return null
         if (id.isBlank()) return null
-        val params = mapOf("id" to id) + when (cred.protocol) {
-            ServerProtocol.SHENYE -> emptyMap()
-            ServerProtocol.SUBSONIC -> subsonicParams
+        if (cred.protocol == ServerProtocol.WEBDAV) {
+            return if (endpoint == "getCoverArt") null else cachedWebDavUrl(id, null)
         }
+        val params = if (cred.protocol == ServerProtocol.SUBSONIC) mapOf("id" to id) + subsonicParams else mapOf("id" to id)
         val salt = if (endpoint == "getCoverArt") "cover-art-v1" else UUID.randomUUID().toString()
         return buildApiUrl(cred, endpoint, params, salt = salt)
     }
@@ -867,6 +948,11 @@ class SubsonicApiClient internal constructor(
         // Parse on IO too: responses such as getArtists or getAlbum lists can be large, and
         // callers are often ViewModel coroutines on the main thread.
         val cred = credentials ?: return@withContext Result.failure(IllegalStateException("Credentials not set"))
+        if (cred.protocol == ServerProtocol.WEBDAV) {
+            return@withContext Result.failure(UnsupportedOperationException(
+                context.getString(chromahub.rhythm.app.R.string.shenye_webdav_read_only)
+            ))
+        }
         request(endpoint, params, listParams, cred).mapCatching {
             parseApiResponse(it, cred.protocol).getOrThrow()
         }
@@ -934,7 +1020,7 @@ class SubsonicApiClient internal constructor(
      */
     fun toUrlRef(url: String): String? {
         val cred = credentials ?: return null
-        if (!url.startsWith(cred.serverUrl + cred.protocol.path)) return null
+        if (cred.protocol == ServerProtocol.WEBDAV || !url.startsWith(cred.serverUrl + cred.protocol.path)) return null
         val parsed = url.toHttpUrlOrNull() ?: return null
         val endpoint = parsed.pathSegments.lastOrNull()?.removeSuffix(cred.protocol.suffix)
         if (endpoint != "stream" && endpoint != "getCoverArt") return null
@@ -994,6 +1080,7 @@ class SubsonicApiClient internal constructor(
             }
             ServerProtocol.SUBSONIC -> MessageDigest.getInstance("MD5")
                 .digest((cred.password + salt).toByteArray(Charsets.UTF_8)).toLowerHex()
+            ServerProtocol.WEBDAV -> error("WebDAV does not use a signed API URL")
         }
         val builder = parsedUrl.newBuilder()
             .addQueryParameter("u", cred.username)
@@ -1191,16 +1278,18 @@ class SubsonicApiClient internal constructor(
     private fun loadCredentials(): Credentials? {
         val server = prefs.getString(KEY_SERVER_URL, null).orEmpty()
         val user = prefs.getString(KEY_USERNAME, null).orEmpty()
-        val pass = prefs.getString(KEY_PASSWORD, null).orEmpty()
+        val storedPassword = prefs.getString(KEY_PASSWORD, null).orEmpty()
+        if (server.isBlank() || user.isBlank() || storedPassword.isBlank()) return null
 
-        if (server.isBlank() || user.isBlank() || pass.isBlank()) {
-            return null
+        val protocol = when (prefs.getString(KEY_PROTOCOL, null)) {
+            ServerProtocol.SUBSONIC.name -> ServerProtocol.SUBSONIC
+            ServerProtocol.WEBDAV.name -> ServerProtocol.WEBDAV
+            else -> ServerProtocol.SHENYE
         }
-
-        val protocol = if (prefs.getString(KEY_PROTOCOL, null) == ServerProtocol.SUBSONIC.name) {
-            ServerProtocol.SUBSONIC
+        val pass = if (protocol == ServerProtocol.WEBDAV) {
+            runCatching { WebDavPassword.decrypt(storedPassword) }.getOrNull() ?: return null
         } else {
-            ServerProtocol.SHENYE
+            storedPassword
         }
         return Credentials(serverUrl = server, username = user, password = pass, protocol = protocol)
     }

@@ -286,8 +286,14 @@ class StreamingMusicRepositoryImpl(
     }
 
     fun getCatalogCacheFile(serviceId: String): java.io.File {
-        return java.io.File(context.filesDir, "streaming_catalog_${serviceId}.json")
+        val webDavKey = if (serviceId == StreamingServiceId.SUBSONIC) subsonicClient.webDavCacheKey() else null
+        val cacheKey = webDavKey?.let { "WEBDAV_$it" } ?: serviceId
+        return java.io.File(context.filesDir, "streaming_catalog_$cacheKey.json")
     }
+
+    fun isWebDavConnected(): Boolean = subsonicClient.webDavCacheKey() != null
+
+    internal fun webDavAccess(url: String) = subsonicClient.webDavAccess(url)
 
     /** Progress of an interrupted full library fetch (see [ResumableLibraryFetch]). */
     private fun getLibraryFetchCheckpointDir(serviceId: String): java.io.File {
@@ -411,17 +417,29 @@ class StreamingMusicRepositoryImpl(
         serverUrl: String,
         username: String,
         password: String,
-        saveCredentials: Boolean = true
+        saveCredentials: Boolean = true,
+        useWebDav: Boolean = false
     ): ServiceConnectionInfo {
         val normalizedService = normalizeServiceId(serviceId)
+        initialCatalogLoad.await()
+        val previousWebDav = subsonicClient.webDavCacheKey()
 
         val result = when (normalizedService) {
-            StreamingServiceId.SUBSONIC -> subsonicClient.login(serverUrl, username, password, saveCredentials)
+            StreamingServiceId.SUBSONIC -> subsonicClient.login(serverUrl, username, password, saveCredentials, useWebDav)
             StreamingServiceId.JELLYFIN -> jellyfinClient.login(serverUrl, username, password, saveCredentials)
             else -> Result.failure(IllegalArgumentException("Unsupported streaming service"))
         }
 
-        val connection = result.getOrElse { throw it }
+        val connection = result.getOrThrow()
+        if (previousWebDav != subsonicClient.webDavCacheKey()) {
+            clearInMemoryCatalog()
+            providerAlbumCache.clear()
+            providerAlbumsFlow.value = emptyList()
+            starredSongCache.clear()
+            likedSongIds.clear()
+            updateLikedSongsFlow()
+            catalogSaveFilter.remember(null)
+        }
         // A new login may be another account or server: never resume its predecessor's fetch.
         ResumableLibraryFetch.discard(getLibraryFetchCheckpointDir(normalizedService))
         return ServiceConnectionInfo(
@@ -432,13 +450,14 @@ class StreamingMusicRepositoryImpl(
 
     suspend fun disconnect(serviceId: String) {
         val normalized = normalizeServiceId(serviceId)
+        val catalogFile = getCatalogCacheFile(normalized)
         when (normalized) {
             StreamingServiceId.SUBSONIC -> subsonicClient.logout()
             StreamingServiceId.JELLYFIN -> jellyfinClient.logout()
         }
 
         try {
-            catalogCacheWriter.delete(getCatalogCacheFile(normalized))
+            catalogCacheWriter.delete(catalogFile)
             catalogSaveFilter.remember(null)
             ResumableLibraryFetch.discard(getLibraryFetchCheckpointDir(normalized))
         } catch (e: Exception) {
@@ -835,6 +854,7 @@ class StreamingMusicRepositoryImpl(
 
         val resolved = when (serviceId) {
             StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerId, bitrate)
+                ?: subsonicClient.cachedWebDavUrl(providerId, songCache[songId]?.streamingUrl)
             StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerId, bitrate)
             else -> null
         }
@@ -1131,6 +1151,7 @@ class StreamingMusicRepositoryImpl(
         val bitrate = desiredBitrateKbps()
         val primaryDownloadUrl = when (serviceId) {
             StreamingServiceId.SUBSONIC -> subsonicClient.buildDownloadUrl(providerId, format = "raw")
+                ?: subsonicClient.cachedWebDavUrl(providerId, songCache[songId]?.streamingUrl)
             StreamingServiceId.JELLYFIN -> jellyfinClient.buildDownloadUrl(providerId)
             else -> null
         }
@@ -1160,6 +1181,9 @@ class StreamingMusicRepositoryImpl(
             val reqBuilder = okhttp3.Request.Builder()
                 .url(url)
                 .header("User-Agent", "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
+            if (serviceId == StreamingServiceId.SUBSONIC) {
+                webDavAccess(url)?.let { reqBuilder.header("Authorization", it.authorization) }
+            }
             if (serviceId == StreamingServiceId.JELLYFIN) {
                 jellyfinClient.getAccessToken()?.let { token ->
                     reqBuilder.header("Authorization", "MediaBrowser Client=\"Rhythm\", Device=\"Rhythm Android\", DeviceId=\"rhythm-android-client\", Version=\"${chromahub.rhythm.app.BuildConfig.VERSION_NAME}\", Token=\"$token\"")
@@ -1182,7 +1206,10 @@ class StreamingMusicRepositoryImpl(
                 return@withContext false
             }
 
-            val ext = extractExtension(response.header("Content-Disposition"), response.header("Content-Type"))
+            val webDavExtension = if (webDavAccess(targetUrl) != null) {
+                finalSong.codec?.let { ".$it" }?.takeIf { it in DownloadFiles.AUDIO_EXTENSIONS }
+            } else null
+            val ext = webDavExtension ?: extractExtension(response.header("Content-Disposition"), response.header("Content-Type"))
             val file = getDownloadFile(songId, ext)
             // Stream into a .part file and rename once the body is complete: isDownloaded() and
             // playback treat any non-empty file as a finished download, so a transfer that dies
@@ -1548,6 +1575,16 @@ class StreamingMusicRepositoryImpl(
         if (!isServiceConnected(serviceId)) {
             clearInMemoryCatalog()
             return emptyList()
+        }
+
+        if (serviceId == StreamingServiceId.SUBSONIC && isWebDavConnected()) {
+            val providerSongs = subsonicClient.refreshWebDavLibrary(onProgress).getOrThrow()
+            val mappedSongs = mapProviderSongs(serviceId, providerSongs.take(limit))
+            providerAlbumCache.clear()
+            providerAlbumsFlow.value = emptyList()
+            artistsFlow.value = emptyList()
+            replaceCatalog(mappedSongs)
+            return mappedSongs
         }
 
         // Sync artists directly from provider first so all artists appear immediately

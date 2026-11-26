@@ -8,4 +8,15 @@
     <string name="shenye_server_library">Server library</string>
     <string name="shenye_local_library">Local library</string>
     <string name="shenye_local_network_required">Allow local network access to connect to this server.</string>
+    <string name="shenye_music_server_source">Shenye / Navidrome</string>
+    <string name="shenye_webdav_source">WebDAV</string>
+    <string name="shenye_webdav_description">Enter the URL of your cloud music folder, your account email, and the WebDAV app password.</string>
+    <string name="shenye_webdav_password">WebDAV app password</string>
+    <string name="shenye_webdav_unknown_artist">Unknown artist</string>
+    <string name="shenye_webdav_folder_required">Enter an HTTPS music folder URL, for example https://dav.jianguoyun.com/dav/Music/.</string>
+    <string name="shenye_webdav_folder_missing">The WebDAV music folder was not found. Check the folder name and URL.</string>
+    <string name="shenye_webdav_access_denied">WebDAV access denied. Check your account email, app password, and folder access.</string>
+    <string name="shenye_webdav_rate_limited">The WebDAV request limit was reached. Try again later.</string>
+    <string name="shenye_webdav_directory_limit">This Nutstore folder has too many entries. Split it into album folders and rescan.</string>
+    <string name="shenye_webdav_read_only">This action is unavailable for a WebDAV music folder.</string>
 </resources>

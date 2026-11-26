@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -20,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import chromahub.rhythm.app.R
+import chromahub.rhythm.app.features.streaming.data.provider.WebDavMusicClient
 import chromahub.rhythm.app.features.streaming.data.provider.isShenyeLocalAddress
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceId
 import chromahub.rhythm.app.features.streaming.presentation.viewmodel.StreamingMusicViewModel
@@ -77,11 +80,14 @@ internal fun MusicServerForm(
     val busy by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val session = sessions[serverId] ?: viewModel.getServiceSession(serverId)
+    var useWebDav by rememberSaveable(session.serverUrl) {
+        mutableStateOf(viewModel.isWebDavConnected() || WebDavMusicClient.isNutstoreAddress(session.serverUrl))
+    }
     var address by rememberSaveable(session.serverUrl) { mutableStateOf(session.serverUrl) }
     var username by rememberSaveable(session.username) { mutableStateOf(session.username.ifBlank { "music" }) }
     var token by remember { mutableStateOf("") }
     var networkPermissionDenied by remember { mutableStateOf(false) }
-    val connect = { viewModel.connectService(serverId, address.trim(), username.trim(), token) }
+    val connect = { viewModel.connectService(serverId, address.trim(), username.trim(), token, useWebDav) }
     val permission = "android.permission.ACCESS_LOCAL_NETWORK"
     val requestNetworkPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         networkPermissionDenied = !granted
@@ -104,16 +110,50 @@ internal fun MusicServerForm(
                 color = MaterialTheme.colorScheme.onPrimary
             )
             Text(
-                text = stringResource(if (session.isConnected) R.string.streaming_status_connected else R.string.shenye_server_description),
+                text = stringResource(when {
+                    session.isConnected && address == session.serverUrl -> R.string.streaming_status_connected
+                    useWebDav -> R.string.shenye_webdav_description
+                    else -> R.string.shenye_server_description
+                }),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !useWebDav,
+                onClick = {
+                    if (useWebDav) {
+                        useWebDav = false
+                        address = ""
+                        username = "music"
+                        token = ""
+                    }
+                },
+                enabled = !busy,
+                label = { Text(stringResource(R.string.shenye_music_server_source)) }
+            )
+            FilterChip(
+                selected = useWebDav,
+                onClick = {
+                    if (!useWebDav) {
+                        useWebDav = true
+                        address = WebDavMusicClient.NUTSTORE_URL
+                        username = ""
+                        token = ""
+                    }
+                },
+                enabled = !busy,
+                label = { Text(stringResource(R.string.shenye_webdav_source)) }
             )
         }
         OutlinedTextField(
             value = address,
             onValueChange = { address = it },
             label = { Text(stringResource(R.string.streaming_service_setup_server_url)) },
-            placeholder = { Text(stringResource(R.string.shenye_server_address_hint)) },
+            placeholder = {
+                Text(if (useWebDav) WebDavMusicClient.NUTSTORE_URL else stringResource(R.string.shenye_server_address_hint))
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !busy
@@ -129,7 +169,7 @@ internal fun MusicServerForm(
         OutlinedTextField(
             value = token,
             onValueChange = { token = it },
-            label = { Text(stringResource(R.string.shenye_server_token)) },
+            label = { Text(stringResource(if (useWebDav) R.string.shenye_webdav_password else R.string.shenye_server_token)) },
             modifier = Modifier.fillMaxWidth(),
             visualTransformation = PasswordVisualTransformation(),
             singleLine = true,

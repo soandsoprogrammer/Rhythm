@@ -33,6 +33,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import chromahub.rhythm.app.features.streaming.data.provider.UserTrustManager
+import chromahub.rhythm.app.features.streaming.data.repository.StreamingMusicRepositoryImpl
 import java.util.concurrent.TimeUnit
 import android.os.Build
 import androidx.media3.common.TrackSelectionParameters
@@ -570,24 +571,28 @@ class RhythmPlayerEngine(
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
         val baseDataSourceFactory = DefaultDataSource.Factory(context, cacheDataSourceFactory)
+        val streamingRepository by lazy { StreamingMusicModule.provideStreamingMusicRepository(context) }
 
         val resolvingDataSourceFactory = ResolvingDataSource.Factory(
             baseDataSourceFactory,
             object : ResolvingDataSource.Resolver {
                 override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
-                    if (dataSpec.uri.scheme == "streaming") {
-                        val trackId = dataSpec.uri.lastPathSegment
-                        if (!trackId.isNullOrBlank()) {
-                            val repository = StreamingMusicModule.provideStreamingMusicRepository(context)
-                            // Run blocking is safe here as ExoPlayer calls resolveDataSpec on a background thread
-                            val freshUrl = runBlocking { repository.getStreamingUrl(trackId) }
-                            if (!freshUrl.isNullOrBlank()) {
-                                return dataSpec.buildUpon()
-                                    .setUri((freshUrl).toUri())
-                                    .setKey("streaming_$trackId")
-                                    .build()
-                            }
-                        }
+                    val resolved = if (dataSpec.uri.scheme == "streaming") resolveStreamingTrack(dataSpec) else dataSpec
+                    if (resolved.uri.scheme != "https" && resolved.uri.scheme != "http") return resolved
+                    val access = (streamingRepository as? StreamingMusicRepositoryImpl)
+                        ?.webDavAccess(resolved.uri.toString()) ?: return resolved
+                    return resolved.buildUpon()
+                        .setHttpRequestHeaders(resolved.httpRequestHeaders + ("Authorization" to access.authorization))
+                        .setKey(access.cacheKey)
+                        .build()
+                }
+
+                private fun resolveStreamingTrack(dataSpec: DataSpec): DataSpec {
+                    val trackId = dataSpec.uri.lastPathSegment ?: return dataSpec
+                    // ExoPlayer resolves DataSpecs on its loading thread.
+                    val url = runBlocking { streamingRepository.getStreamingUrl(trackId) }.orEmpty()
+                    if (url.isNotBlank()) {
+                        return dataSpec.buildUpon().setUri(url.toUri()).setKey("streaming_$trackId").build()
                     }
                     return dataSpec
                 }

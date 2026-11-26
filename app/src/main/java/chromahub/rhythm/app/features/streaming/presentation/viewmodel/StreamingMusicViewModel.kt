@@ -487,7 +487,15 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
         disconnectService(selectedService)
     }
 
-    fun connectService(serviceId: String, serverUrl: String, username: String, password: String) {
+    fun isWebDavConnected(): Boolean = providerRepository?.isWebDavConnected() == true
+
+    fun connectService(
+        serviceId: String,
+        serverUrl: String,
+        username: String,
+        password: String,
+        useWebDav: Boolean = false
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
@@ -501,7 +509,8 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     serverUrl = serverUrl,
                     username = username,
                     password = password,
-                    saveCredentials = appSettings.rememberStreamingPasswords.value
+                    saveCredentials = appSettings.rememberStreamingPasswords.value,
+                    useWebDav = useWebDav
                 ) ?: throw IllegalStateException("Streaming repository is not initialized")
 
                 serviceSessionRepository.connect(
@@ -518,6 +527,8 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 
                 // Show success notification
                 notificationManager.notifyAuthenticationSuccess(getSourceTypeName(sourceTypeFromServiceId(normalizedServiceId)))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val userMessage = when {
                     e is java.net.ConnectException ||
