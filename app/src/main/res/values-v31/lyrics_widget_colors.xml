@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="lyrics_widget_surface">@android:color/system_neutral1_50</color>
+    <color name="lyrics_widget_text">@android:color/system_neutral1_900</color>
+    <color name="lyrics_widget_subtext">@android:color/system_neutral2_700</color>
+    <color name="lyrics_widget_primary">@android:color/system_accent1_700</color>
+    <color name="lyrics_widget_on_primary">#FFFFFFFF</color>
+    <color name="lyrics_widget_tertiary">@android:color/system_accent3_700</color>
+    <color name="lyrics_widget_on_tertiary">#FFFFFFFF</color>
+</resources>

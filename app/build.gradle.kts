@@ -98,6 +98,7 @@ android {
     }
 
     val signingProperties = getProperties(".config/keystore.properties")
+    val unsignedShenyeBuild = findProperty("shenyeUnsigned") == "true"
     val releaseSigning = if (signingProperties != null) {
         signingConfigs.create("release") {
             keyAlias = signingProperties.property("key_alias")
@@ -120,7 +121,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = releaseSigning
+            signingConfig = if (unsignedShenyeBuild) null else releaseSigning
 //            ndk {
 //                debugSymbolLevel = "SYMBOL_TABLE"
 //            }

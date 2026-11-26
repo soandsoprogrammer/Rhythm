@@ -8,35 +8,36 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
-        android:src="@drawable/widget_preview_bg" />
+        android:src="@drawable/widget_preview_bg"
+        android:tint="@color/lyrics_widget_surface" />
 
     <LinearLayout
         android:id="@+id/lyrics_widget_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="10dp">
+        android:padding="6dp">
 
         <TextView
             android:id="@+id/lyrics_widget_title"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="19dp"
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="@string/app_name"
-            android:textColor="@color/widget_preview_text"
+            android:textColor="@color/lyrics_widget_text"
             android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/lyrics_widget_artist"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="16dp"
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_preview_subtext"
+            android:textColor="@color/lyrics_widget_subtext"
             android:textSize="12sp"
             android:visibility="gone" />
 
@@ -51,37 +52,37 @@
             <TextView
                 android:id="@+id/lyrics_widget_previous_line"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="17dp"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:textColor="@color/widget_preview_subtext"
+                android:textColor="@color/lyrics_widget_subtext"
                 android:textSize="12sp"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/lyrics_widget_current_line"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:maxLines="2"
                 android:text="@string/rhythmlyricswidget_open_to_play"
-                android:textColor="@color/widget_preview_primary"
+                android:textColor="@color/lyrics_widget_primary"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/lyrics_widget_next_line"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="17dp"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:textColor="@color/widget_preview_subtext"
+                android:textColor="@color/lyrics_widget_subtext"
                 android:textSize="12sp"
                 android:visibility="gone" />
 
@@ -107,7 +108,7 @@
                     android:layout_height="match_parent"
                     android:importantForAccessibility="no"
                     android:src="@drawable/widget_preview_circle"
-                    android:tint="@color/widget_preview_tertiary" />
+                    android:tint="@color/lyrics_widget_tertiary" />
 
                 <ImageView
                     android:id="@+id/lyrics_widget_previous_icon"
@@ -116,7 +117,7 @@
                     android:layout_gravity="center"
                     android:importantForAccessibility="no"
                     android:src="@drawable/ic_skip_previous"
-                    android:tint="@color/widget_preview_on_tertiary" />
+                    android:tint="@color/lyrics_widget_on_tertiary" />
             </FrameLayout>
 
             <FrameLayout
@@ -131,7 +132,7 @@
                     android:layout_height="match_parent"
                     android:importantForAccessibility="no"
                     android:src="@drawable/widget_preview_pill"
-                    android:tint="@color/widget_preview_primary" />
+                    android:tint="@color/lyrics_widget_primary" />
 
                 <ImageView
                     android:id="@+id/lyrics_widget_play_icon"
@@ -140,7 +141,7 @@
                     android:layout_gravity="center"
                     android:importantForAccessibility="no"
                     android:src="@drawable/ic_play_arrow"
-                    android:tint="@color/widget_preview_on_primary" />
+                    android:tint="@color/lyrics_widget_on_primary" />
             </FrameLayout>
 
             <FrameLayout
@@ -156,7 +157,7 @@
                     android:layout_height="match_parent"
                     android:importantForAccessibility="no"
                     android:src="@drawable/widget_preview_circle"
-                    android:tint="@color/widget_preview_tertiary" />
+                    android:tint="@color/lyrics_widget_tertiary" />
 
                 <ImageView
                     android:id="@+id/lyrics_widget_next_icon"
@@ -165,7 +166,7 @@
                     android:layout_gravity="center"
                     android:importantForAccessibility="no"
                     android:src="@drawable/ic_skip_next"
-                    android:tint="@color/widget_preview_on_tertiary" />
+                    android:tint="@color/lyrics_widget_on_tertiary" />
             </FrameLayout>
         </LinearLayout>
     </LinearLayout>

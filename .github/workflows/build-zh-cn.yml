@@ -2,7 +2,7 @@ name: Build Shenye APK
 
 on:
   push:
-    branches: [shenye, shenye-playback]
+    branches: [shenye-playback]
     paths:
       - '.github/workflows/build-zh-cn.yml'
       - 'app/src/main/**'
@@ -27,24 +27,41 @@ jobs:
           packages: ''
       - name: Check server syntax
         run: node --check server/shenye-server.mjs
-      - name: Build GitHub release APK
-        run: bash gradlew :app:assembleGithubRelease -PversionCodeOverride=565061362 -PversionNameOverride=5.6.506.1362 --stacktrace
-      - name: Verify and prepare universal APK
+      - name: Build the unsigned GitHub release APK
         shell: bash
         run: |
           set -euo pipefail
-          apk=$(find app/build/outputs/apk/github/release -maxdepth 1 -type f -name '*-githubRelease.apk' -print -quit)
-          test -n "$apk"
+          version_suffix=$((1362 + GITHUB_RUN_NUMBER))
+          version_code=$((565061362 + GITHUB_RUN_NUMBER))
+          bash gradlew :app:assembleGithubRelease \
+            -PshenyeUnsigned=true \
+            -PversionCodeOverride="$version_code" \
+            -PversionNameOverride="5.6.506.$version_suffix" \
+            --stacktrace
+      - name: Verify and stage the offline-signing input
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t apk_files < <(find app/build/outputs/apk/github/release -maxdepth 1 -type f \
+            \( -name '*-githubRelease.apk' -o -name '*-githubRelease-unsigned.apk' -o -name 'app-github-release-unsigned.apk' \))
+          test "${apk_files[0]:-}"
+          test "${#apk_files[@]}" -eq 1
+          apk="${apk_files[0]}"
           build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
-          "$build_tools/apksigner" verify --verbose --print-certs "$apk"
+          if "$build_tools/apksigner" verify "$apk" >/dev/null 2>&1; then
+            echo "Expected an unsigned APK for local signing."
+            exit 1
+          fi
+          "$build_tools/zipalign" -c 4 "$apk"
           "$build_tools/aapt2" dump badging "$apk" > apk-badging.txt
+          grep -E "^package: name='app\.shenye\.music'" apk-badging.txt
           grep -E "^locales:.*'zh(-CN)?'" apk-badging.txt
           mkdir verified-apk
-          cp "$apk" verified-apk/Shenye-android.apk
+          cp "$apk" verified-apk/Shenye-android-unsigned.apk
           cd verified-apk
-          sha256sum Shenye-android.apk > SHA256SUMS.txt
+          sha256sum Shenye-android-unsigned.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v7
         with:
-          name: Shenye-android
+          name: Shenye-android-unsigned
           path: verified-apk/
           if-no-files-found: error

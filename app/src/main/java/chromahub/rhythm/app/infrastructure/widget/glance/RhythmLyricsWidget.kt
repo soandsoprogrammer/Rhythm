@@ -14,19 +14,13 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
-import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.RemoteViews
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.ui.graphics.toArgb
 import chromahub.rhythm.app.R
 import chromahub.rhythm.app.activities.MainActivity
 import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
-import kotlin.math.roundToInt
 
 internal object RhythmLyricsWidget {
     data class Lines(
@@ -45,57 +39,82 @@ internal object RhythmLyricsWidget {
         val hasSong: Boolean get() = id.isNotEmpty()
     }
 
+    private data class TextFrame(val previous: String, val current: String, val next: String)
+    private data class WidgetState(val height: Int, val playback: Playback, val text: TextFrame)
+
     private var playback: Playback? = null
     private var lines = Lines()
-
-    // A partial update needs a complete layout first. Keep the size of each layout
-    // we have rendered so line changes do not have to query widget options again.
-    private val renderedHeights = mutableMapOf<Int, Int>()
+    private val rendered = mutableMapOf<Int, WidgetState>()
+    private val handler = Handler(Looper.getMainLooper())
+    private var updatePending = false
 
     @Synchronized
     fun updatePlayback(context: Context, force: Boolean = false) {
-        val newPlayback = readPlayback(context)
-        if (newPlayback.id != playback?.id) lines = Lines()
-        if (force || newPlayback != playback) {
-            playback = newPlayback
+        val next = readPlayback(context)
+        val before = playback
+        if (next.id != before?.id) lines = Lines()
+        playback = next
+        if (force) {
             val manager = AppWidgetManager.getInstance(context)
-            renderFull(context, manager, ids(context, manager), newPlayback)
+            renderFull(context, manager, ids(context, manager), next)
+        } else if (next != before) {
+            scheduleUpdate(context)
         }
     }
 
     @Synchronized
     fun updateLyrics(context: Context, newLines: Lines) {
-        val previousPlayback = playback
-        val newPlayback = previousPlayback ?: readPlayback(context)
-        val displayLines = if (newPlayback.hasSong) newLines else Lines()
-        if (displayLines == lines && previousPlayback != null) return
-        playback = newPlayback
-        lines = displayLines
+        val hadPlayback = playback != null
+        val state = playback ?: readPlayback(context).also { playback = it }
+        val next = if (state.hasSong) newLines else Lines()
+        if (hadPlayback && next == lines) return
 
-        val manager = AppWidgetManager.getInstance(context)
-        for (id in ids(context, manager)) {
-            val height = renderedHeights[id]
-            if (height == null) {
-                renderFull(context, manager, intArrayOf(id), newPlayback)
-            } else {
-                val update = newViews(context)
-                update.setLyrics(context, newPlayback.hasSong, height)
-                manager.partiallyUpdateAppWidget(intArrayOf(id), update)
-            }
-        }
+        lines = next
+        scheduleUpdate(context)
     }
 
     @Synchronized
     fun render(context: Context, manager: AppWidgetManager, widgetIds: IntArray) {
-        val newPlayback = readPlayback(context)
-        if (newPlayback.id != playback?.id) lines = Lines()
-        playback = newPlayback
-        renderFull(context, manager, widgetIds, newPlayback)
+        val state = readPlayback(context)
+        if (state.id != playback?.id) lines = Lines()
+        playback = state
+        renderFull(context, manager, widgetIds, state)
     }
 
     @Synchronized
     fun forget(widgetIds: IntArray) {
-        widgetIds.forEach { renderedHeights.remove(it) }
+        widgetIds.forEach { rendered.remove(it) }
+    }
+
+    // A seek or track transition can send several changes in the same frame.
+    // Coalesce them so the launcher only receives the latest visible text.
+    private fun scheduleUpdate(context: Context) {
+        if (updatePending) return
+        updatePending = true
+        val appContext = context.applicationContext
+        handler.postDelayed({ publishPending(appContext) }, 40L)
+    }
+
+    @Synchronized
+    private fun publishPending(context: Context) {
+        updatePending = false
+        val state = playback ?: return
+        val manager = AppWidgetManager.getInstance(context)
+        for (id in ids(context, manager)) {
+            val old = rendered[id]
+            if (old == null) {
+                renderFull(context, manager, intArrayOf(id), state)
+                continue
+            }
+            val newText = frame(context, state, old.height)
+            if (old.playback == state && old.text == newText) continue
+
+            val update = newViews(context)
+            update.writePlayback(context, state, old.height, old.playback)
+            update.writeLyrics(newText, old.text)
+            manager.partiallyUpdateAppWidget(intArrayOf(id), update)
+            rendered[id] = WidgetState(old.height, state, newText)
+        }
     }
 
     private fun readPlayback(context: Context): Playback {
@@ -124,20 +143,13 @@ internal object RhythmLyricsWidget {
             val height = manager.getAppWidgetOptions(id)
                 .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 120)
             val view = newViews(context)
-            val padding = ((if (height < 120) 6 else 10) * context.resources.displayMetrics.density).roundToInt()
-            view.setViewPadding(R.id.lyrics_widget_content, padding, padding, padding, padding)
-            view.setTextViewText(R.id.lyrics_widget_title, if (state.hasSong) state.title else context.getString(R.string.app_name))
+            val text = frame(context, state, height)
             view.setViewVisibility(R.id.lyrics_widget_title, visibility(height >= 92))
-            view.setTextViewText(R.id.lyrics_widget_artist, state.artist)
-            view.setViewVisibility(R.id.lyrics_widget_artist, visibility(height >= 120 && state.hasSong && state.artist.isNotBlank()))
-            view.setViewVisibility(R.id.lyrics_widget_controls, visibility(height >= 68 && state.hasSong))
-            view.setImageViewResource(R.id.lyrics_widget_play_icon, if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow)
-            view.setContentDescription(
-                R.id.lyrics_widget_play_pause,
-                context.getString(if (state.isPlaying) R.string.action_pause else R.string.action_play)
-            )
-            view.setLyrics(context, state.hasSong, height)
-            view.setColors(context)
+            view.setViewVisibility(R.id.lyrics_widget_artist, visibility(height >= 150))
+            view.setViewVisibility(R.id.lyrics_widget_previous_line, visibility(height >= 150))
+            view.setViewVisibility(R.id.lyrics_widget_next_line, visibility(height >= 150))
+            view.writePlayback(context, state, height)
+            view.writeLyrics(text)
             view.setOnClickPendingIntent(
                 R.id.lyrics_widget_content,
                 PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
@@ -147,43 +159,51 @@ internal object RhythmLyricsWidget {
             view.setOnClickPendingIntent(R.id.lyrics_widget_next, playbackAction(context, MediaPlaybackService.ACTION_SKIP_NEXT))
 
             manager.updateAppWidget(intArrayOf(id), view)
-            renderedHeights[id] = height
+            rendered[id] = WidgetState(height, state, text)
         }
     }
 
-    private fun RemoteViews.setLyrics(context: Context, hasSong: Boolean, height: Int) {
+    private fun frame(context: Context, state: Playback, height: Int): TextFrame {
         val current = when {
-            !hasSong -> context.getString(R.string.rhythmlyricswidget_open_to_play)
+            !state.hasSong -> context.getString(R.string.rhythmlyricswidget_open_to_play)
             !lines.hasLyrics -> context.getString(R.string.rhythmlyricswidget_no_lyrics_available)
             else -> lines.current ?: "♪ " + context.getString(R.string.lyrics_instrumental)
         }
-        setTextViewText(R.id.lyrics_widget_current_line, current)
-        setTextViewText(R.id.lyrics_widget_previous_line, lines.previous.orEmpty())
-        setTextViewText(R.id.lyrics_widget_next_line, lines.next.orEmpty())
-        setViewVisibility(R.id.lyrics_widget_previous_line, visibility(height >= 150 && hasSong && lines.previous != null))
-        setViewVisibility(R.id.lyrics_widget_next_line, visibility(height >= 150 && hasSong && lines.next != null))
+        return TextFrame(
+            previous = if (height >= 150 && state.hasSong) lines.previous.orEmpty() else "",
+            current = current,
+            next = if (height >= 150 && state.hasSong) lines.next.orEmpty() else ""
+        )
     }
 
-    private fun RemoteViews.setColors(context: Context) {
-        val night = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-            Configuration.UI_MODE_NIGHT_YES
-        val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (night) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        } else {
-            if (night) darkColorScheme() else lightColorScheme()
+    private fun RemoteViews.writeLyrics(text: TextFrame, before: TextFrame? = null) {
+        if (before?.current != text.current) setTextViewText(R.id.lyrics_widget_current_line, text.current)
+        if (before?.previous != text.previous) setTextViewText(R.id.lyrics_widget_previous_line, text.previous)
+        if (before?.next != text.next) setTextViewText(R.id.lyrics_widget_next_line, text.next)
+    }
+
+    private fun RemoteViews.writePlayback(
+        context: Context,
+        state: Playback,
+        height: Int,
+        before: Playback? = null
+    ) {
+        if (before?.title != state.title || before?.hasSong != state.hasSong) {
+            val title = if (state.hasSong) state.title else context.getString(R.string.app_name)
+            setTextViewText(R.id.lyrics_widget_title, title)
         }
-        setInt(R.id.lyrics_widget_background, "setColorFilter", colors.surfaceContainer.toArgb())
-        setTextColor(R.id.lyrics_widget_title, colors.onSurface.toArgb())
-        setTextColor(R.id.lyrics_widget_artist, colors.onSurfaceVariant.toArgb())
-        setTextColor(R.id.lyrics_widget_current_line, colors.primary.toArgb())
-        setTextColor(R.id.lyrics_widget_previous_line, colors.onSurfaceVariant.toArgb())
-        setTextColor(R.id.lyrics_widget_next_line, colors.onSurfaceVariant.toArgb())
-        setInt(R.id.lyrics_widget_previous_background, "setColorFilter", colors.tertiary.toArgb())
-        setInt(R.id.lyrics_widget_next_background, "setColorFilter", colors.tertiary.toArgb())
-        setInt(R.id.lyrics_widget_previous_icon, "setColorFilter", colors.onTertiary.toArgb())
-        setInt(R.id.lyrics_widget_next_icon, "setColorFilter", colors.onTertiary.toArgb())
-        setInt(R.id.lyrics_widget_play_background, "setColorFilter", colors.primary.toArgb())
-        setInt(R.id.lyrics_widget_play_icon, "setColorFilter", colors.onPrimary.toArgb())
+        if (before?.artist != state.artist) setTextViewText(R.id.lyrics_widget_artist, state.artist)
+        if (before?.hasSong != state.hasSong) {
+            setViewVisibility(R.id.lyrics_widget_controls, visibility(height >= 80 && state.hasSong))
+        }
+        if (before?.isPlaying != state.isPlaying) {
+            val icon = if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
+            setImageViewResource(R.id.lyrics_widget_play_icon, icon)
+            setContentDescription(
+                R.id.lyrics_widget_play_pause,
+                context.getString(if (state.isPlaying) R.string.action_pause else R.string.action_play)
+            )
+        }
     }
 
     private fun playbackAction(context: Context, action: String): PendingIntent =
