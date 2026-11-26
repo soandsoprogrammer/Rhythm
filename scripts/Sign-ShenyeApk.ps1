@@ -20,6 +20,7 @@ $keystore = Join-Path $keyRoot 'shenye-release.p12'
 $passwordFile = Join-Path $keyRoot 'password.dpapi'
 $fingerprintFile = Join-Path $keyRoot 'certificate-sha256.txt'
 $aliasName = 'shenye-release'
+$releaseFingerprint = '8fa0ba60e4cead524ee34376fbe4f9f96bd648aa81bfc2fefae243ec364d970b'
 $java = Join-Path $JavaDirectory 'bin\java.exe'
 $keytool = Join-Path $JavaDirectory 'bin\keytool.exe'
 
@@ -111,31 +112,21 @@ if ($Initialize -or $RestoreKey) {
         $source = (Resolve-Path -LiteralPath $RestoreKey).Path
         $password = Read-Host 'Enter the key backup password' -AsSecureString
         $fingerprint = Invoke-WithPassword $password { Get-CertificateFingerprint $source }
-        if ($fingerprint -ne (($ExpectedFingerprint -replace ':','').ToLowerInvariant())) {
+        if ($fingerprint -ne $releaseFingerprint -or $fingerprint -ne (($ExpectedFingerprint -replace ':','').ToLowerInvariant())) {
             throw 'The restored key does not match the expected certificate.'
         }
         Copy-Item -LiteralPath $source -Destination $keystore
     } elseif ((Test-Path -LiteralPath $keystore) -or (Test-Path -LiteralPath $passwordFile)) {
         $password = Import-Password
         $fingerprint = Invoke-WithPassword $password { Get-CertificateFingerprint $keystore }
-        if ((Get-Content -LiteralPath $fingerprintFile -Raw).Trim() -ne $fingerprint) {
+        if ($fingerprint -ne $releaseFingerprint -or (Get-Content -LiteralPath $fingerprintFile -Raw).Trim() -ne $fingerprint) {
             throw 'The signing key no longer matches its original fingerprint.'
         }
         Write-KeyBackup
         Write-Output "Shenye signing certificate SHA-256 $fingerprint"
         return
     } else {
-        $secret = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-        $password = ConvertTo-SecureString -String $secret -AsPlainText -Force
-        $secret = $null
-        $tempKey = Join-Path $keyRoot 'new-shenye-release.p12'
-        if (Test-Path -LiteralPath $tempKey) { throw 'An unfinished key already exists.' }
-        Invoke-WithPassword $password {
-            & $keytool -genkeypair -noprompt -keystore $tempKey -storetype PKCS12 -storepass:env SHENYE_APK_KEYSTORE_PASSWORD -alias $aliasName -keyalg RSA -keysize 3072 -sigalg SHA256withRSA -validity 18250 -dname 'CN=Shenye APK Release'
-            if ($LASTEXITCODE -ne 0) { throw 'Could not create the Shenye signing key.' }
-        }
-        $fingerprint = Invoke-WithPassword $password { Get-CertificateFingerprint $tempKey }
-        Move-Item -LiteralPath $tempKey -Destination $keystore
+        throw 'Shenye already has a release certificate. Restore the original key with -RestoreKey.'
     }
     ConvertFrom-SecureString -SecureString $password | Set-Content -LiteralPath $passwordFile -Encoding utf8NoBOM
     Set-Content -LiteralPath $fingerprintFile -Value $fingerprint -Encoding utf8NoBOM
@@ -146,6 +137,7 @@ if ($Initialize -or $RestoreKey) {
 
 $password = Import-Password
 $expected = (Get-Content -LiteralPath $fingerprintFile -Raw).Trim()
+if ($expected -ne $releaseFingerprint) { throw 'The local signing fingerprint differs from the pinned Shenye certificate.' }
 $tools = Get-ChildItem (Join-Path $AndroidSdk 'build-tools') -Directory |
     Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' -and (Test-Path (Join-Path $_.FullName 'lib\apksigner.jar')) } |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
