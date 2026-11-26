@@ -2,9 +2,9 @@
 <resources>
     <string name="shenye_name" translatable="false">声页</string>
     <string name="shenye_server">Music server</string>
-    <string name="shenye_server_description">Connect to a self-hosted Shenye music server.</string>
+    <string name="shenye_server_description">Enter your Shenye or Navidrome server address, username, and password or access token.</string>
     <string name="shenye_server_address_hint" translatable="false">http://192.168.1.10:8787</string>
-    <string name="shenye_server_token">Access token</string>
+    <string name="shenye_server_token">Password or access token</string>
     <string name="shenye_server_library">Server library</string>
     <string name="shenye_local_library">Local library</string>
     <string name="shenye_local_network_required">Allow local network access to connect to this server.</string>

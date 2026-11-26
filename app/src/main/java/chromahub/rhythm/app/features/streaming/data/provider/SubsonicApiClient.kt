@@ -22,6 +22,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.security.MessageDigest
@@ -34,7 +35,7 @@ import chromahub.rhythm.app.shared.data.model.LyricsData
 class ShenyeServerException(val code: Int, message: String) : Exception(message)
 
 /**
- * Catalog client for the Shenye music server. The legacy class and source type keep library IDs stable.
+ * Catalog client for Shenye and Subsonic-compatible music servers.
  */
 class SubsonicApiClient internal constructor(
     context: Context,
@@ -44,11 +45,22 @@ class SubsonicApiClient internal constructor(
 
     constructor(context: Context) : this(context, buildHttpClient(), LIBRARY_FETCH_RETRY_DELAY_MS)
 
+    private enum class ServerProtocol(val path: String, val suffix: String, val responseKey: String) {
+        SHENYE("/shenye/v1/", "", "shenye"),
+        SUBSONIC("/rest/", ".view", "subsonic-response")
+    }
+
     private data class Credentials(
         val serverUrl: String,
         val username: String,
-        val password: String
+        val password: String,
+        val protocol: ServerProtocol
     )
+
+    private class UnsupportedServerProtocol : Exception("Unsupported music server response")
+
+    private class MusicServerHttpException(val statusCode: Int, responseMessage: String) :
+        Exception("HTTP $statusCode: $responseMessage")
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -79,14 +91,24 @@ class SubsonicApiClient internal constructor(
             return Result.failure(IllegalArgumentException("Password is required"))
         }
 
-        val candidate = Credentials(normalizedUrl, username.trim(), password)
-        return request("ping", credentialOverride = candidate).mapCatching { response ->
-            parseShenyeResponse(response).getOrThrow()
+        val shenye = Credentials(normalizedUrl, username.trim(), password, ServerProtocol.SHENYE)
+        val shenyeResult = authenticate(shenye)
+        val failure = shenyeResult.exceptionOrNull()
+        val loginResult = if (failure is UnsupportedServerProtocol ||
+            (failure is MusicServerHttpException && (failure.statusCode == 404 || failure.statusCode == 405))
+        ) {
+            authenticate(shenye.copy(protocol = ServerProtocol.SUBSONIC))
+        } else {
+            shenyeResult
+        }
+
+        return loginResult.map { candidate ->
             if (saveCredentials) {
                 prefs.edit {
                     putString(KEY_SERVER_URL, normalizedUrl)
                     putString(KEY_USERNAME, candidate.username)
                     putString(KEY_PASSWORD, candidate.password)
+                    putString(KEY_PROTOCOL, candidate.protocol.name)
                 }
             } else {
                 prefs.edit { clear() }
@@ -95,6 +117,12 @@ class SubsonicApiClient internal constructor(
             ProviderConnectionResult(displayName = candidate.username, serverUrl = normalizedUrl)
         }
     }
+
+    private suspend fun authenticate(candidate: Credentials): Result<Credentials> =
+        request("ping", cred = candidate).mapCatching { response ->
+            parseApiResponse(response, candidate.protocol).getOrThrow()
+            candidate
+        }
 
     fun logout() {
         credentials = null
@@ -400,7 +428,8 @@ class SubsonicApiClient internal constructor(
      */
     private fun catalogAccountKey(): String? {
         val cred = credentials ?: return null
-        val material = "${cred.serverUrl}\n${cred.username}"
+        val account = "${cred.serverUrl}\n${cred.username}"
+        val material = if (cred.protocol == ServerProtocol.SUBSONIC) "$account\nsubsonic" else account
         val digest = MessageDigest.getInstance("SHA-256").digest(material.toByteArray(Charsets.UTF_8))
         return digest.joinToString(separator = "") { "%02x".format(it) }
     }
@@ -654,6 +683,9 @@ class SubsonicApiClient internal constructor(
     ): Result<LyricsData?> {
         if (!isConnected()) return Result.failure(IllegalStateException("Music server is not connected"))
         if (songId.isBlank()) return Result.failure(IllegalArgumentException("Song id is required"))
+        if (credentials?.protocol == ServerProtocol.SUBSONIC) {
+            return getSubsonicLyrics(songId, artist, title)
+        }
         return requestAndParse("getLyricsBySongId", mapOf("id" to songId)) { response ->
             val lyrics = response.optJSONObject("lyrics")?.optString("value").orEmpty().trim()
             if (lyrics.isBlank()) return@requestAndParse null
@@ -667,28 +699,136 @@ class SubsonicApiClient internal constructor(
         }
     }
 
+    private suspend fun getSubsonicLyrics(
+        songId: String,
+        artist: String?,
+        title: String?
+    ): Result<LyricsData?> {
+        return withContext(Dispatchers.IO) {
+            // 1. Try OpenSubsonic getLyricsBySongId
+            val openSubsonicResult = requestAndParse("getLyricsBySongId", mapOf("id" to songId))
+            if (openSubsonicResult.isSuccess) {
+                val response = openSubsonicResult.getOrThrow()
+                val lyricsList = response.optJSONObject("lyricsList")
+                val structuredLyricsObj = lyricsList?.opt("structuredLyrics")
+                val structuredLyricsList: List<JSONObject> = when (structuredLyricsObj) {
+                    null -> emptyList()
+                    is JSONArray -> (0 until structuredLyricsObj.length()).mapNotNull { structuredLyricsObj.optJSONObject(it) }
+                    is JSONObject -> listOf(structuredLyricsObj)
+                    else -> emptyList()
+                }
+
+                if (structuredLyricsList.isNotEmpty()) {
+                    // Prefer synced lyrics if available
+                    val targetLyrics = structuredLyricsList.firstOrNull { it.optBoolean("synced", false) }
+                        ?: structuredLyricsList.first()
+
+                    val isSynced = targetLyrics.optBoolean("synced", false)
+                    val offset = targetLyrics.optLong("offset", 0L)
+                    val linesObj = targetLyrics.opt("line")
+                    val linesList: List<JSONObject> = when (linesObj) {
+                        null -> emptyList()
+                        is JSONArray -> (0 until linesObj.length()).mapNotNull { linesObj.optJSONObject(it) }
+                        is JSONObject -> listOf(linesObj)
+                        else -> emptyList()
+                    }
+
+                    if (linesList.isNotEmpty()) {
+                        val plainLines = mutableListOf<String>()
+                        val syncedLines = mutableListOf<String>()
+
+                        for (lineObj in linesList) {
+                            val text = lineObj.optString("value", "")
+                            plainLines.add(text)
+                            if (isSynced) {
+                                val startMs = (lineObj.optLong("start", 0L) + offset).coerceAtLeast(0L)
+                                syncedLines.add("${formatLrcTimestamp(startMs)}$text")
+                            }
+                        }
+
+                        val plainLyrics = plainLines.joinToString("\n").takeIf { it.isNotBlank() }
+                        val syncedLyrics = if (isSynced) syncedLines.joinToString("\n").takeIf { it.isNotBlank() } else null
+
+                        if (plainLyrics != null || syncedLyrics != null) {
+                            return@withContext Result.success(
+                                LyricsData(
+                                    plainLyrics = plainLyrics,
+                                    syncedLyrics = syncedLyrics,
+                                    source = "Navidrome (Subsonic)"
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. Fallback to legacy getLyrics(artist, title)
+            if (!artist.isNullOrBlank() && !title.isNullOrBlank()) {
+                val legacyResult = requestAndParse("getLyrics", mapOf("artist" to artist, "title" to title))
+                if (legacyResult.isSuccess) {
+                    val lyricsObj = legacyResult.getOrThrow().optJSONObject("lyrics")
+                    val content = lyricsObj?.optString("value", lyricsObj.optString("content", "")).orEmpty().trim()
+                    if (content.isNotBlank()) {
+                        val isLrc = content.lines().any { it.trim().matches(Regex("^\\[\\d{2}:\\d{2}.*?\\].*")) }
+                        val plainLyrics = if (isLrc) {
+                            content.lines().joinToString("\n") { it.replace(Regex("^\\[\\d{2}:\\d{2}.*?\\]"), "").trim() }
+                        } else {
+                            content
+                        }
+                        val syncedLyrics = if (isLrc) content else null
+
+                        return@withContext Result.success(
+                            LyricsData(
+                                plainLyrics = plainLyrics.takeIf { it.isNotBlank() },
+                                syncedLyrics = syncedLyrics?.takeIf { it.isNotBlank() },
+                                source = "Navidrome (Subsonic)"
+                            )
+                        )
+                    }
+                }
+            }
+
+            Result.success(null)
+        }
+    }
+
+    private fun formatLrcTimestamp(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        val hundredths = (ms % 1000) / 10
+        return String.format(java.util.Locale.US, "[%02d:%02d.%02d]", minutes, seconds, hundredths)
+    }
+
     fun buildStreamUrl(songId: String, maxBitRateKbps: Int = 0, format: String? = null): String? =
-        mediaUrl("stream", songId)
+        mediaUrl("stream", songId, buildMap {
+            if (maxBitRateKbps > 0) put("maxBitRate", maxBitRateKbps.toString())
+            if (!format.isNullOrBlank()) put("format", format)
+        })
 
-    fun buildDownloadUrl(songId: String, format: String? = null): String? = mediaUrl("download", songId)
+    fun buildDownloadUrl(songId: String, format: String? = null): String? =
+        mediaUrl("download", songId, format?.takeIf { it.isNotBlank() }?.let { mapOf("format" to it) }.orEmpty())
 
-    fun buildCoverArtUrl(coverArtId: String, size: Int = 500): String? = mediaUrl("getCoverArt", coverArtId)
+    fun buildCoverArtUrl(coverArtId: String, size: Int = 500): String? =
+        mediaUrl("getCoverArt", coverArtId, mapOf("size" to size.toString()))
 
-    private fun mediaUrl(endpoint: String, id: String): String? {
+    private fun mediaUrl(endpoint: String, id: String, subsonicParams: Map<String, String>): String? {
         val cred = credentials ?: return null
         if (id.isBlank()) return null
+        val params = mapOf("id" to id) + when (cred.protocol) {
+            ServerProtocol.SHENYE -> emptyMap()
+            ServerProtocol.SUBSONIC -> subsonicParams
+        }
         val salt = if (endpoint == "getCoverArt") "cover-art-v1" else UUID.randomUUID().toString()
-        return buildApiUrl(cred, endpoint, mapOf("id" to id), salt = salt)
+        return buildApiUrl(cred, endpoint, params, salt = salt)
     }
 
     private suspend fun request(
         endpoint: String, 
         params: Map<String, String> = emptyMap(),
         listParams: Map<String, List<String>> = emptyMap(),
-        credentialOverride: Credentials? = null
+        cred: Credentials
     ): Result<String> {
-        val cred = credentialOverride ?: credentials ?: return Result.failure(IllegalStateException("Credentials not set"))
-
         return withContext(Dispatchers.IO) {
             try {
                 val url = buildApiUrl(cred, endpoint, params, listParams)
@@ -697,14 +837,18 @@ class SubsonicApiClient internal constructor(
                     .header("Accept", "application/json")
                     .header("User-Agent", "Shenye/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
                     .apply {
-                        if (endpoint in MUTATION_ENDPOINTS) post(EMPTY_REQUEST_BODY) else get()
+                        if (cred.protocol == ServerProtocol.SHENYE && endpoint in MUTATION_ENDPOINTS) {
+                            post(EMPTY_REQUEST_BODY)
+                        } else {
+                            get()
+                        }
                     }
                     .build()
 
                 okHttpClient.newCall(request).execute().use { response ->
                     val body = response.body.string()
                     if (!response.isSuccessful) {
-                        return@withContext Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+                        return@withContext Result.failure(MusicServerHttpException(response.code, response.message))
                     }
                     Result.success(body)
                 }
@@ -722,10 +866,10 @@ class SubsonicApiClient internal constructor(
     ): Result<JSONObject> = withContext(Dispatchers.IO) {
         // Parse on IO too: responses such as getArtists or getAlbum lists can be large, and
         // callers are often ViewModel coroutines on the main thread.
-        request(endpoint, params, listParams).fold(
-            onSuccess = { parseShenyeResponse(it) },
-            onFailure = { Result.failure(it) }
-        )
+        val cred = credentials ?: return@withContext Result.failure(IllegalStateException("Credentials not set"))
+        request(endpoint, params, listParams, cred).mapCatching {
+            parseApiResponse(it, cred.protocol).getOrThrow()
+        }
     }
 
     /**
@@ -763,11 +907,11 @@ class SubsonicApiClient internal constructor(
         }
     }
 
-    private fun parseShenyeResponse(raw: String): Result<JSONObject> {
+    private fun parseApiResponse(raw: String, protocol: ServerProtocol): Result<JSONObject> {
         return try {
             val root = JSONObject(raw)
-            val wrapper = root.optJSONObject("shenye")
-                ?: return Result.failure(IllegalStateException("Invalid Shenye server response"))
+            val wrapper = root.optJSONObject(protocol.responseKey)
+                ?: return Result.failure(UnsupportedServerProtocol())
 
             val status = wrapper.optString("status", "failed")
             if (status != "ok") {
@@ -778,8 +922,8 @@ class SubsonicApiClient internal constructor(
             }
 
             Result.success(wrapper)
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (_: JSONException) {
+            Result.failure(UnsupportedServerProtocol())
         }
     }
 
@@ -790,9 +934,9 @@ class SubsonicApiClient internal constructor(
      */
     fun toUrlRef(url: String): String? {
         val cred = credentials ?: return null
-        if (!url.startsWith("${cred.serverUrl}/shenye/v1/")) return null
+        if (!url.startsWith(cred.serverUrl + cred.protocol.path)) return null
         val parsed = url.toHttpUrlOrNull() ?: return null
-        val endpoint = parsed.pathSegments.lastOrNull()
+        val endpoint = parsed.pathSegments.lastOrNull()?.removeSuffix(cred.protocol.suffix)
         if (endpoint != "stream" && endpoint != "getCoverArt") return null
         val params = (0 until parsed.querySize)
             .filter { parsed.queryParameterName(it) !in URL_AUTH_PARAMS }
@@ -841,16 +985,25 @@ class SubsonicApiClient internal constructor(
         listParams: Map<String, List<String>> = emptyMap(),
         salt: String = UUID.randomUUID().toString()
     ): String {
-        val parsedUrl = (cred.serverUrl + "/shenye/v1/" + endpoint).toHttpUrlOrNull()
+        val parsedUrl = (cred.serverUrl + cred.protocol.path + endpoint + cred.protocol.suffix).toHttpUrlOrNull()
             ?: throw IllegalArgumentException("Invalid server address")
-        val proof = Mac.getInstance("HmacSHA256").run {
-            init(SecretKeySpec(cred.password.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-            doFinal(listOf(cred.username, endpoint, salt).joinToString("\n").toByteArray(Charsets.UTF_8)).toLowerHex()
+        val proof = when (cred.protocol) {
+            ServerProtocol.SHENYE -> Mac.getInstance("HmacSHA256").run {
+                init(SecretKeySpec(cred.password.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+                doFinal(listOf(cred.username, endpoint, salt).joinToString("\n").toByteArray(Charsets.UTF_8)).toLowerHex()
+            }
+            ServerProtocol.SUBSONIC -> MessageDigest.getInstance("MD5")
+                .digest((cred.password + salt).toByteArray(Charsets.UTF_8)).toLowerHex()
         }
         val builder = parsedUrl.newBuilder()
             .addQueryParameter("u", cred.username)
             .addQueryParameter("s", salt)
             .addQueryParameter("t", proof)
+        if (cred.protocol == ServerProtocol.SUBSONIC) {
+            builder.addQueryParameter("v", "1.16.1")
+                .addQueryParameter("c", "Shenye")
+                .addQueryParameter("f", "json")
+        }
         params.forEach { (key, value) -> builder.addQueryParameter(key, value) }
         listParams.forEach { (key, values) ->
             values.forEach { value -> builder.addQueryParameter(key, value) }
@@ -1044,7 +1197,12 @@ class SubsonicApiClient internal constructor(
             return null
         }
 
-        return Credentials(serverUrl = server, username = user, password = pass)
+        val protocol = if (prefs.getString(KEY_PROTOCOL, null) == ServerProtocol.SUBSONIC.name) {
+            ServerProtocol.SUBSONIC
+        } else {
+            ServerProtocol.SHENYE
+        }
+        return Credentials(serverUrl = server, username = user, password = pass, protocol = protocol)
     }
 
     private fun normalizeServerUrl(input: String): String {
@@ -1071,9 +1229,10 @@ class SubsonicApiClient internal constructor(
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
+        private const val KEY_PROTOCOL = "protocol"
 
         /** Query parameters that carry credentials or client info; not part of a URL reference. */
-        private val URL_AUTH_PARAMS = setOf("u", "t", "s")
+        private val URL_AUTH_PARAMS = setOf("u", "t", "s", "v", "c", "f")
         private const val URL_REF_ID_PLACEHOLDER = "RHYTHMURLREFID"
         private val EMPTY_REQUEST_BODY = ByteArray(0).toRequestBody()
         private val MUTATION_ENDPOINTS = setOf("star", "unstar", "createPlaylist", "updatePlaylist", "deletePlaylist", "scrobble", "reportPlayback")

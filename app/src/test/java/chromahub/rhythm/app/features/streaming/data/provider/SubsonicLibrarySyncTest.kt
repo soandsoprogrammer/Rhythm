@@ -120,6 +120,54 @@ class SubsonicLibrarySyncTest {
         return client
     }
 
+    @Test
+    fun testNavidromeLoginPersistsProtocolAndSignsMediaUrls() = runBlocking {
+        val context = MockContext()
+        val client = SubsonicApiClient(context, OkHttpClient(), libraryFetchRetryDelayMs = 10)
+        val password = "testpass"
+        mockServer.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath) {
+                "/shenye/v1/ping" -> MockResponse.Builder().body("<!doctype html>").build()
+                "/rest/ping.view" -> {
+                    val salt = request.url.queryParameter("s")
+                    val expectedToken = MessageDigest.getInstance("MD5")
+                        .digest((password + salt).toByteArray(Charsets.UTF_8)).toLowerHex()
+                    val authorized = salt != null &&
+                        request.url.queryParameter("t") == expectedToken &&
+                        request.url.queryParameter("u") == "testuser" &&
+                        request.url.queryParameter("v") == "1.16.1" &&
+                        request.url.queryParameter("c") == "Shenye" &&
+                        request.url.queryParameter("f") == "json"
+                    val body = if (authorized) {
+                        """{"subsonic-response":{"status":"ok","type":"navidrome"}}"""
+                    } else {
+                        """{"subsonic-response":{"status":"failed","error":{"code":40}}}"""
+                    }
+                    MockResponse.Builder().body(body).build()
+                }
+                "/rest/getStarred2.view" -> MockResponse.Builder().body(
+                    """{"subsonic-response":{"status":"ok","starred2":{"song":[{"id":"track-1","title":"Song"}]}}}"""
+                ).build()
+                else -> MockResponse.Builder().code(404).build()
+            }
+        }
+
+        client.login(mockServer.url("/").toString(), "testuser", password).getOrThrow()
+        val restored = SubsonicApiClient(context, OkHttpClient(), libraryFetchRetryDelayMs = 10)
+        assertTrue(restored.ping().getOrThrow())
+        assertEquals("track-1", restored.getStarredSongs().getOrThrow().single().providerId)
+
+        val streamUrl = restored.buildStreamUrl("track-1", maxBitRateKbps = 320)!!
+        val streamRef = restored.toUrlRef(streamUrl)!!
+        assertEquals("stream?id=track-1&maxBitRate=320", streamRef)
+        val rebuilt = restored.urlRefResolver()(streamRef)!!.toHttpUrl()
+        assertEquals("/rest/stream.view", rebuilt.encodedPath)
+        assertEquals("track-1", rebuilt.queryParameter("id"))
+        assertEquals("320", rebuilt.queryParameter("maxBitRate"))
+        assertNotNull(rebuilt.queryParameter("t"))
+        assertEquals("/rest/download.view", restored.buildDownloadUrl("track-1")!!.toHttpUrl().encodedPath)
+    }
+
     // -------------------------------------------------------------------------
     // 1. LowerHex Tests
     // -------------------------------------------------------------------------
@@ -376,8 +424,9 @@ class SubsonicLibrarySyncTest {
         private const val TEST_ALBUM_COUNT = 6
     }
 
-    private class MockContext(private val values: Map<String, Any> = emptyMap()) : ContextWrapper(null) {
-        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = MockPreferences(values)
+    private class MockContext(values: Map<String, Any> = emptyMap()) : ContextWrapper(null) {
+        private val preferences = MockPreferences(values)
+        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = preferences
     }
 
     private class MockPreferences(initial: Map<String, Any>) : SharedPreferences {

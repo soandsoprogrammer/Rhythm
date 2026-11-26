@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="shenye_server">自定义音乐服务器</string>
-    <string name="shenye_server_description">填写你部署的声页服务器地址和访问令牌。</string>
-    <string name="shenye_server_token">访问令牌</string>
+    <string name="shenye_server_description">填写声页或 Navidrome 的服务器地址、用户名，以及对应的访问令牌或密码。</string>
+    <string name="shenye_server_token">密码或访问令牌</string>
     <string name="shenye_server_library">服务器曲库</string>
     <string name="shenye_local_library">本地曲库</string>
     <string name="shenye_local_network_required">请允许声页访问本地网络，然后重新连接。</string>
