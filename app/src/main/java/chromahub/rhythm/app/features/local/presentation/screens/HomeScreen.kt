@@ -707,6 +707,7 @@ private fun StreamingHomeBody(
     val context = LocalContext.current
     val windowSizeClass = calculateWindowSizeClass(context as android.app.Activity)
     val widthSizeClass = windowSizeClass.widthSizeClass
+    val heightSizeClass = windowSizeClass.heightSizeClass
     val scrollState = rememberScrollState()
 
     val appSettings = AppSettings.getInstance(context)
