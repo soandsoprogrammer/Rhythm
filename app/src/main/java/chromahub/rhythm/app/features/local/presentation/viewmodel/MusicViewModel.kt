@@ -39,6 +39,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import chromahub.rhythm.app.R
+import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceId
 import chromahub.rhythm.app.activities.MainActivity
 import chromahub.rhythm.app.activities.RhythmGuardTimeoutActivity
 import chromahub.rhythm.app.shared.data.model.Album
@@ -168,6 +169,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         
         // Player control constants
         private const val REWIND_THRESHOLD_MS = 3000L // 3 seconds
+        private const val LOCAL_PLAYBACK_STALL_MS = 10_000L
+        private const val NETWORK_PLAYBACK_STALL_MS = 45_000L
 
         // Keep manually imported lyrics bounded to avoid UI stalls and oversized cache files.
         private const val MAX_EDITABLE_LYRICS_CHARS = 200_000
@@ -4281,53 +4284,52 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private fun startPlaybackWatchdog() {
         playbackWatchdogJob?.cancel()
         playbackWatchdogJob = viewModelScope.launch {
-            Log.d(TAG, "Playback watchdog started")
             var lastPosition = -1L
-            var lastProgressTime = System.currentTimeMillis()
-            
+            var lastBufferedPosition = -1L
+            var lastProgressTime = SystemClock.elapsedRealtime()
+
             while (isActive) {
-                delay(1000) // check every second
+                delay(1_000)
                 val controller = mediaController ?: continue
                 val state = controller.playbackState
-                
-                // If ended or idle, reset the progress timers and continue
-                if (state == Player.STATE_ENDED || state == Player.STATE_IDLE) {
+                val now = SystemClock.elapsedRealtime()
+
+                if (!controller.playWhenReady || state == Player.STATE_ENDED || state == Player.STATE_IDLE ||
+                    controller.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
+                ) {
                     lastPosition = -1L
-                    lastProgressTime = System.currentTimeMillis()
+                    lastBufferedPosition = -1L
+                    lastProgressTime = now
                     continue
                 }
-                
-                if (controller.playWhenReady) {
-                    val currentPos = controller.currentPosition
-                    if (lastPosition == -1L) {
-                        lastPosition = currentPos
-                        lastProgressTime = System.currentTimeMillis()
-                    } else {
-                        val progress = currentPos - lastPosition
-                        if (progress != 0L) {
-                            lastPosition = currentPos
-                            lastProgressTime = System.currentTimeMillis()
-                        } else {
-                            val noProgressDuration = System.currentTimeMillis() - lastProgressTime
-                            if (noProgressDuration >= 10000L) { // 10 seconds timeout
-                                Log.w(TAG, "Playback watchdog: Stuck/looping at position $currentPos (progress: $progress ms) in state $state for $noProgressDuration ms. Triggering corruption dialog.")
-                                
-                                // Determine the scenario-specific error message
-                                val scenarioMessage = when {
-                                    isSeeking.value -> "The player got stuck loading while seeking. The file may have corrupted indexes or metadata."
-                                    state == Player.STATE_BUFFERING -> "The song is stuck loading/buffering indefinitely. This usually indicates a corrupted or unreadable audio stream."
-                                    else -> "The player is unable to make progress during playback. The file format or encoding might be corrupted."
-                                }
-                                
-                                triggerTrackCorruption(controller, scenarioMessage)
-                                break
-                            }
-                        }
-                    }
-                } else {
-                    lastPosition = -1L
-                    lastProgressTime = System.currentTimeMillis()
+
+                val item = controller.currentMediaItem
+                val scheme = item?.localConfiguration?.uri?.scheme
+                    ?: _currentSong.value?.takeIf { it.id == item?.mediaId }?.uri?.scheme
+                val isNetwork = scheme == "http" || scheme == "https" || scheme == "streaming"
+                val position = controller.currentPosition
+                val bufferedPosition = controller.bufferedPosition
+
+                if (position != lastPosition ||
+                    (isNetwork && state == Player.STATE_BUFFERING && bufferedPosition > lastBufferedPosition)
+                ) {
+                    lastProgressTime = now
                 }
+                lastPosition = position
+                lastBufferedPosition = bufferedPosition
+
+                val timeout = if (isNetwork) NETWORK_PLAYBACK_STALL_MS else LOCAL_PLAYBACK_STALL_MS
+                if (now - lastProgressTime < timeout) continue
+
+                val message = when {
+                    isNetwork -> getApplication<Application>().getString(R.string.playback_network_timeout)
+                    isSeeking.value -> "The player got stuck loading while seeking. The file may have corrupted indexes or metadata."
+                    state == Player.STATE_BUFFERING -> "The song is stuck loading/buffering indefinitely. This usually indicates a corrupted or unreadable audio stream."
+                    else -> "The player is unable to make progress during playback. The file format or encoding might be corrupted."
+                }
+                Log.w(TAG, "Playback stalled at $position ms in state $state (network=$isNetwork)")
+                triggerTrackCorruption(controller, message)
+                break
             }
         }
     }
@@ -4371,7 +4373,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             Log.e(TAG, "Player error encountered in ViewModel: ${error.message}", error)
             if (appSettings.trackErrorCheckerEnabled.value) {
                 _corruptedTrackName.value = _currentSong.value?.title ?: "Unknown Song"
-                _corruptedTrackMessage.value = "The player encountered a playback error: ${error.message ?: "Unknown error"}"
+                _corruptedTrackMessage.value = when (error.errorCode) {
+                    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                        getApplication<Application>().getString(R.string.playback_network_timeout)
+                    else -> "The player encountered a playback error: ${error.message ?: "Unknown error"}"
+                }
                 _showCorruptionDialog.value = true
             }
         }
@@ -5032,9 +5039,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             "dsf", "dff", "dsd" -> "audio/dsd"
             else -> null
         }
+        val playbackUri = if (id.startsWith("${StreamingServiceId.SUBSONIC}::") &&
+            (uri.scheme == "http" || uri.scheme == "https")
+        ) {
+            Uri.Builder().scheme("streaming").authority("track").appendPath(id).build()
+        } else {
+            uri
+        }
         return MediaItem.Builder()
             .setMediaId(this.id)
-            .setUri(this.uri)
+            .setUri(playbackUri)
             .apply {
                 if (mimeType != null) {
                     setMimeType(mimeType)

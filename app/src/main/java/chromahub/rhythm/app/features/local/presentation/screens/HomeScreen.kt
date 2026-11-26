@@ -559,16 +559,10 @@ fun HomeScreen(
 
     CollapsibleHeaderScreen(
         title = if (isStreamingMode) context.getString(R.string.streaming_integration_title) else context.getString(R.string.home_title),
-        headerDisplayMode = headerDisplayMode,
-        alwaysCollapsed = false,
-        showAppIcon = showAppIcon,
-        iconVisibilityMode = iconVisibilityMode,
-        headerContent = {
-            chromahub.rhythm.app.features.local.presentation.components.ShenyeMasthead(
-                serverLibrary = isStreamingMode,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-        },
+        headerDisplayMode = if (isStreamingMode) 1 else headerDisplayMode,
+        alwaysCollapsed = isStreamingMode,
+        showAppIcon = showAppIcon && !isStreamingMode,
+        iconVisibilityMode = if (isStreamingMode) 0 else iconVisibilityMode,
         headerActions = buildList {
             val showReorder = !isLandscapeTablet
             val showSettings = !isTablet && floatingNavigationBar
@@ -713,17 +707,9 @@ private fun StreamingHomeBody(
     val context = LocalContext.current
     val windowSizeClass = calculateWindowSizeClass(context as android.app.Activity)
     val widthSizeClass = windowSizeClass.widthSizeClass
-    val heightSizeClass = windowSizeClass.heightSizeClass
     val scrollState = rememberScrollState()
 
     val appSettings = AppSettings.getInstance(context)
-    val showDiscoverCarousel by appSettings.homeShowDiscoverCarousel.collectAsState()
-    val discoverItemCount by appSettings.homeDiscoverItemCount.collectAsState()
-    val discoverShowAlbumName by appSettings.homeDiscoverShowAlbumName.collectAsState()
-    val discoverShowArtistName by appSettings.homeDiscoverShowArtistName.collectAsState()
-    val discoverShowYear by appSettings.homeDiscoverShowYear.collectAsState()
-    val discoverShowPlayButton by appSettings.homeDiscoverShowPlayButton.collectAsState()
-    val discoverShowGradient by appSettings.homeDiscoverShowGradient.collectAsState()
     val showRhythmGuardSection by appSettings.streamingHomeShowRhythmGuard.collectAsState()
     val showRhythmStatsSection by appSettings.streamingHomeShowRhythmStats.collectAsState()
 
@@ -769,21 +755,7 @@ private fun StreamingHomeBody(
         WindowWidthSizeClass.Expanded -> 64.dp
         else -> 20.dp
     }
-    val sectionSpacing = when (widthSizeClass) {
-        WindowWidthSizeClass.Compact -> when (heightSizeClass) {
-            WindowHeightSizeClass.Compact -> 32.dp
-            else -> 40.dp
-        }
-        WindowWidthSizeClass.Medium -> when (heightSizeClass) {
-            WindowHeightSizeClass.Compact -> 48.dp
-            else -> 56.dp
-        }
-        WindowWidthSizeClass.Expanded -> when (heightSizeClass) {
-            WindowHeightSizeClass.Compact -> 52.dp
-            else -> 64.dp
-        }
-        else -> 40.dp
-    }
+    val sectionSpacing = if (widthSizeClass == WindowWidthSizeClass.Compact) 24.dp else 32.dp
 
     val vm = streamingViewModel
     val rawAllSongs = vm?.allSongs?.collectAsState()?.value ?: emptyList()
@@ -951,25 +923,6 @@ private fun StreamingHomeBody(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(sectionSpacing)
         ) {
-        if (showDiscoverCarousel && effectiveAlbums.isNotEmpty()) {
-            ModernFeaturedSection(
-                albums = effectiveAlbums.take(discoverItemCount),
-                onAlbumClick = { album ->
-                    streamingAlbumById[album.id]?.let(onNavigateToAlbum)
-                },
-                showAlbumName = discoverShowAlbumName,
-                showArtistName = discoverShowArtistName,
-                showYear = discoverShowYear,
-                showPlayButton = discoverShowPlayButton,
-                showGradient = discoverShowGradient,
-                widthSizeClass = widthSizeClass,
-                heightSizeClass = heightSizeClass,
-                onPlayAlbum = { album ->
-                    playQueueFromMapped(album.songs, 0, false)
-                }
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()

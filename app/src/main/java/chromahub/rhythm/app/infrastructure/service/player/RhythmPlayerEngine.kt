@@ -582,9 +582,18 @@ class RhythmPlayerEngine(
                             // Run blocking is safe here as ExoPlayer calls resolveDataSpec on a background thread
                             val freshUrl = runBlocking { repository.getStreamingUrl(trackId) }
                             if (!freshUrl.isNullOrBlank()) {
+                                val resolvedUri = freshUrl.toUri()
+                                // Keep original audio separate from previously cached transcoded bytes.
+                                val cacheKey = if (resolvedUri.isHierarchical &&
+                                    resolvedUri.getQueryParameter("format") == "raw"
+                                ) {
+                                    "streaming_raw:${resolvedUri.scheme}:${resolvedUri.encodedAuthority}:${resolvedUri.encodedPath}:$trackId"
+                                } else {
+                                    "streaming_$trackId"
+                                }
                                 return dataSpec.buildUpon()
-                                    .setUri((freshUrl).toUri())
-                                    .setKey("streaming_$trackId")
+                                    .setUri(resolvedUri)
+                                    .setKey(cacheKey)
                                     .build()
                             }
                         }

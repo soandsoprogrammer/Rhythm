@@ -800,11 +800,8 @@ class SubsonicApiClient internal constructor(
         return String.format(java.util.Locale.US, "[%02d:%02d.%02d]", minutes, seconds, hundredths)
     }
 
-    fun buildStreamUrl(songId: String, maxBitRateKbps: Int = 0, format: String? = null): String? =
-        mediaUrl("stream", songId, buildMap {
-            if (maxBitRateKbps > 0) put("maxBitRate", maxBitRateKbps.toString())
-            if (!format.isNullOrBlank()) put("format", format)
-        })
+    fun buildStreamUrl(songId: String): String? =
+        mediaUrl("stream", songId, mapOf("format" to "raw"))
 
     fun buildDownloadUrl(songId: String, format: String? = null): String? =
         mediaUrl("download", songId, format?.takeIf { it.isNotBlank() }?.let { mapOf("format" to it) }.orEmpty())
@@ -974,7 +971,7 @@ class SubsonicApiClient internal constructor(
 
     private fun buildFromUrlRef(endpoint: String, id: String, params: Map<String, String>): String? = when (endpoint) {
         "getCoverArt" -> buildCoverArtUrl(id, params["size"]?.toIntOrNull() ?: 500)
-        "stream" -> buildStreamUrl(id, params["maxBitRate"]?.toIntOrNull() ?: 0, params["format"])
+        "stream" -> buildStreamUrl(id)
         else -> null
     }
 

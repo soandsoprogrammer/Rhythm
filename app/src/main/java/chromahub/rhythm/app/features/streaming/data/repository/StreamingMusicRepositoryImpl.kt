@@ -831,11 +831,9 @@ class StreamingMusicRepositoryImpl(
             return null // Provider is not connected
         }
         
-        val bitrate = desiredBitrateKbps()
-
         val resolved = when (serviceId) {
-            StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerId, bitrate)
-            StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerId, bitrate)
+            StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerId)
+            StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerId, desiredBitrateKbps())
             else -> null
         }
 
@@ -1128,15 +1126,14 @@ class StreamingMusicRepositoryImpl(
         
         val (serviceId, providerId) = decodeSongId(songId) ?: return@withContext false
         
-        val bitrate = desiredBitrateKbps()
         val primaryDownloadUrl = when (serviceId) {
             StreamingServiceId.SUBSONIC -> subsonicClient.buildDownloadUrl(providerId, format = "raw")
             StreamingServiceId.JELLYFIN -> jellyfinClient.buildDownloadUrl(providerId)
             else -> null
         }
         val fallbackStreamUrl = when (serviceId) {
-            StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerId, bitrate)
-            StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerId, bitrate)
+            StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerId)
+            StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerId, desiredBitrateKbps())
             else -> null
         }
         val targetUrl = primaryDownloadUrl ?: fallbackStreamUrl ?: return@withContext false
@@ -1958,7 +1955,7 @@ class StreamingMusicRepositoryImpl(
             ?.takeIf { it.isNotBlank() }
             ?.let { encodeAlbumId(serviceId, it) }
         val streamingUrl = when (serviceId) {
-            StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerSong.providerId, desiredBitrateKbps())
+            StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerSong.providerId)
             StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerSong.providerId, desiredBitrateKbps())
             else -> null
         }

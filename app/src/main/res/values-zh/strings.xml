@@ -2634,4 +2634,7 @@
     <string name="folder_blocked_success">屏蔽的文件夹：%1$s</string>
     <string name="folder_whitelisted_success">白名单文件夹：%1$s</string>
     <string name="error_folder_add_failed">无法解析文件夹路径。请选择有效的文件夹。</string>
+    <string name="streaming_original_audio">原始音频</string>
+    <string name="streaming_original_bitrate">原始音频 · %1$d kbps</string>
+    <string name="playback_network_timeout">网络音频缓冲超时，请检查网络后重试。</string>
 </resources>

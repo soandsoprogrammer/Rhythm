@@ -3082,4 +3082,7 @@
     <string name="viper_engine_status_title">Audio Engine Status</string>
     <string name="viper_engine_status_subtitle">ViPER4Android DSP Monitor</string>
     <string name="viper_engine_upstream">ViPER4Android on GitHub</string>
+    <string name="streaming_original_audio">Original audio</string>
+    <string name="streaming_original_bitrate">Original audio · %1$d kbps</string>
+    <string name="playback_network_timeout">Network audio stalled. Check your connection and try again.</string>
 </resources>

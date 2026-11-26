@@ -103,6 +103,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 import chromahub.rhythm.app.R
+import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceId
 import chromahub.rhythm.app.shared.data.model.PlaybackLocation
 import chromahub.rhythm.app.shared.data.model.AppSettings
 import chromahub.rhythm.app.util.HapticUtils
@@ -150,6 +151,8 @@ fun PlaybackBottomSheet(
     val playbackPitch by musicViewModel.playbackPitch.collectAsState()
     val streamingQuality by appSettings.streamingQuality.collectAsState()
     val appMode by appSettings.appMode.collectAsState()
+    val streamingService by appSettings.streamingService.collectAsState()
+    val currentSong by musicViewModel.currentSong.collectAsState()
     val syncSpeedAndPitch by appSettings.syncSpeedAndPitch.collectAsState()
     val gaplessPlayback by appSettings.gaplessPlayback.collectAsState()
     val useSystemVolume by appSettings.useSystemVolume.collectAsState()
@@ -279,15 +282,24 @@ fun PlaybackBottomSheet(
                 if (appMode == "STREAMING") {
                     item {
                         AnimateIn {
-                            StreamingQualityCard(
-                                selectedQuality = streamingQuality,
-                                onOpenQualitySheet = {
-                                    showQualitySheet = true
-                                },
-                                haptics = haptics,
-                                context = context,
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                            )
+                            if (streamingService == StreamingServiceId.SUBSONIC) {
+                                val bitrate = currentSong?.bitrate?.takeIf { it >= 1_000 }?.div(1_000)
+                                Text(
+                                    text = bitrate?.let { stringResource(R.string.streaming_original_bitrate, it) }
+                                        ?: stringResource(R.string.streaming_original_audio),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 24.dp)
+                                )
+                            } else {
+                                StreamingQualityCard(
+                                    selectedQuality = streamingQuality,
+                                    onOpenQualitySheet = { showQualitySheet = true },
+                                    haptics = haptics,
+                                    context = context,
+                                    modifier = Modifier.padding(horizontal = 24.dp)
+                                )
+                            }
                         }
                     }
                 }

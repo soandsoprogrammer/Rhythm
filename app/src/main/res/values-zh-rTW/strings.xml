@@ -2601,4 +2601,7 @@
     <string name="exp_track_error_checker">曲目故障檢查器</string>
     <string name="exp_track_error_checker_desc">攔截損壞或無法讀取的曲目，以避免無限載入和自動跳過循環</string>
     <string name="unknown_album_name">未知專輯</string>
+    <string name="streaming_original_audio">原始音訊</string>
+    <string name="streaming_original_bitrate">原始音訊 · %1$d kbps</string>
+    <string name="playback_network_timeout">網路音訊緩衝逾時，請檢查網路後重試。</string>
 </resources>
