@@ -20,9 +20,10 @@ import android.view.View
 import android.widget.RemoteViews
 import chromahub.rhythm.app.R
 import chromahub.rhythm.app.activities.MainActivity
-import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
 
 internal object RhythmLyricsWidget {
+    private const val EXPANDED_HEIGHT_DP = 120
+
     data class Lines(
         val previous: String? = null,
         val current: String? = null,
@@ -33,8 +34,7 @@ internal object RhythmLyricsWidget {
     private data class Playback(
         val id: String,
         val title: String,
-        val artist: String,
-        val isPlaying: Boolean
+        val artist: String
     ) {
         val hasSong: Boolean get() = id.isNotEmpty()
     }
@@ -110,7 +110,7 @@ internal object RhythmLyricsWidget {
             if (old.playback == state && old.text == newText) continue
 
             val update = newViews(context)
-            update.writePlayback(context, state, old.height, old.playback)
+            update.writePlayback(context, state, old.playback)
             update.writeLyrics(newText, old.text)
             manager.partiallyUpdateAppWidget(intArrayOf(id), update)
             rendered[id] = WidgetState(old.height, state, newText)
@@ -122,8 +122,7 @@ internal object RhythmLyricsWidget {
         return Playback(
             id = prefs.getString(RhythmMusicWidget.KEY_SONG_ID, "").orEmpty(),
             title = prefs.getString(RhythmMusicWidget.KEY_SONG_TITLE, "").orEmpty(),
-            artist = prefs.getString(RhythmMusicWidget.KEY_ARTIST_NAME, "").orEmpty(),
-            isPlaying = prefs.getBoolean(RhythmMusicWidget.KEY_IS_PLAYING, false)
+            artist = prefs.getString(RhythmMusicWidget.KEY_ARTIST_NAME, "").orEmpty()
         )
     }
 
@@ -144,19 +143,17 @@ internal object RhythmLyricsWidget {
                 .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 120)
             val view = newViews(context)
             val text = frame(context, state, height)
+            val expanded = height >= EXPANDED_HEIGHT_DP
             view.setViewVisibility(R.id.lyrics_widget_title, visibility(height >= 92))
-            view.setViewVisibility(R.id.lyrics_widget_artist, visibility(height >= 150))
-            view.setViewVisibility(R.id.lyrics_widget_previous_line, visibility(height >= 150))
-            view.setViewVisibility(R.id.lyrics_widget_next_line, visibility(height >= 150))
-            view.writePlayback(context, state, height)
+            view.setViewVisibility(R.id.lyrics_widget_artist, visibility(expanded))
+            view.setViewVisibility(R.id.lyrics_widget_previous_line, visibility(expanded))
+            view.setViewVisibility(R.id.lyrics_widget_next_line, visibility(expanded))
+            view.writePlayback(context, state)
             view.writeLyrics(text)
             view.setOnClickPendingIntent(
                 R.id.lyrics_widget_content,
                 PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             )
-            view.setOnClickPendingIntent(R.id.lyrics_widget_play_pause, playbackAction(context, MediaPlaybackService.ACTION_PLAY_PAUSE))
-            view.setOnClickPendingIntent(R.id.lyrics_widget_previous, playbackAction(context, MediaPlaybackService.ACTION_SKIP_PREVIOUS))
-            view.setOnClickPendingIntent(R.id.lyrics_widget_next, playbackAction(context, MediaPlaybackService.ACTION_SKIP_NEXT))
 
             manager.updateAppWidget(intArrayOf(id), view)
             rendered[id] = WidgetState(height, state, text)
@@ -169,10 +166,11 @@ internal object RhythmLyricsWidget {
             !lines.hasLyrics -> context.getString(R.string.rhythmlyricswidget_no_lyrics_available)
             else -> lines.current ?: "♪ " + context.getString(R.string.lyrics_instrumental)
         }
+        val showNeighbors = height >= EXPANDED_HEIGHT_DP && state.hasSong
         return TextFrame(
-            previous = if (height >= 150 && state.hasSong) lines.previous.orEmpty() else "",
+            previous = if (showNeighbors) lines.previous.orEmpty() else "",
             current = current,
-            next = if (height >= 150 && state.hasSong) lines.next.orEmpty() else ""
+            next = if (showNeighbors) lines.next.orEmpty() else ""
         )
     }
 
@@ -185,7 +183,6 @@ internal object RhythmLyricsWidget {
     private fun RemoteViews.writePlayback(
         context: Context,
         state: Playback,
-        height: Int,
         before: Playback? = null
     ) {
         if (before?.title != state.title || before?.hasSong != state.hasSong) {
@@ -193,26 +190,7 @@ internal object RhythmLyricsWidget {
             setTextViewText(R.id.lyrics_widget_title, title)
         }
         if (before?.artist != state.artist) setTextViewText(R.id.lyrics_widget_artist, state.artist)
-        if (before?.hasSong != state.hasSong) {
-            setViewVisibility(R.id.lyrics_widget_controls, visibility(height >= 80 && state.hasSong))
-        }
-        if (before?.isPlaying != state.isPlaying) {
-            val icon = if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
-            setImageViewResource(R.id.lyrics_widget_play_icon, icon)
-            setContentDescription(
-                R.id.lyrics_widget_play_pause,
-                context.getString(if (state.isPlaying) R.string.action_pause else R.string.action_play)
-            )
-        }
     }
-
-    private fun playbackAction(context: Context, action: String): PendingIntent =
-        PendingIntent.getService(
-            context,
-            0,
-            Intent(context, MediaPlaybackService::class.java).setAction(action),
-            PendingIntent.FLAG_IMMUTABLE
-        )
 
     private fun visibility(show: Boolean): Int = if (show) View.VISIBLE else View.GONE
 }

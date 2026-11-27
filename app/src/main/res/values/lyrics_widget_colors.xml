@@ -4,7 +4,4 @@
     <color name="lyrics_widget_text">#FF1E1B22</color>
     <color name="lyrics_widget_subtext">#FF49454F</color>
     <color name="lyrics_widget_primary">#FF65558F</color>
-    <color name="lyrics_widget_on_primary">#FFFFFFFF</color>
-    <color name="lyrics_widget_tertiary">#FF7D5260</color>
-    <color name="lyrics_widget_on_tertiary">#FFFFFFFF</color>
 </resources>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Static fallback preview (previewImage) for the Rhythm Lyrics widget.
-     Brand row, song info, lyric lines with the active line highlighted, controls. -->
+     Brand row, song info, lyric lines with the active line highlighted. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="200dp"
     android:height="112dp"
@@ -67,44 +67,4 @@
     <path
         android:fillColor="#FF49454F"
         android:pathData="M20,126 L166,126 Q170,126 170,130 L170,132 Q170,136 166,136 L20,136 Q16,136 16,132 L16,130 Q16,126 20,126 Z" />
-
-    <!-- Controls - bottom right -->
-    <path
-        android:fillColor="#FFEFB8C8"
-        android:pathData="M126,126 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
-    <group
-        android:scaleX="0.667"
-        android:scaleY="0.667"
-        android:translateX="131.7"
-        android:translateY="119.7">
-        <path
-            android:fillColor="#FF492532"
-            android:pathData="M6,6h2v12H6zm3.5,6l8.5,6V6z" />
-    </group>
-
-    <path
-        android:fillColor="#FFD0BCFF"
-        android:pathData="M176,110 L184,110 Q200,110 200,126 L200,126 Q200,142 184,142 L176,142 Q160,142 160,126 L160,126 Q160,110 176,110 Z" />
-    <group
-        android:scaleX="0.8"
-        android:scaleY="0.8"
-        android:translateX="170.4"
-        android:translateY="116.4">
-        <path
-            android:fillColor="#FF381E72"
-            android:pathData="M8,5v14l11,-7z" />
-    </group>
-
-    <path
-        android:fillColor="#FFEFB8C8"
-        android:pathData="M206,126 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
-    <group
-        android:scaleX="0.667"
-        android:scaleY="0.667"
-        android:translateX="211.7"
-        android:translateY="119.7">
-        <path
-            android:fillColor="#FF492532"
-            android:pathData="M6,18l8.5,-6L6,6v12zM16,6v12h2V6h-2z" />
-    </group>
 </vector>
